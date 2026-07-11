@@ -9,6 +9,7 @@ final class TabManager {
     private(set) var tabs: [BrowserTab] = []
     var selectedTabID: UUID?
     weak var downloadManager: DownloadManager?
+    weak var libraryManager: LibraryManager?
 
     var selectedTab: BrowserTab? { tabs.first { $0.id == selectedTabID } }
     private let webViewFactory: WebViewFactory
@@ -124,7 +125,12 @@ final class TabManager {
         return true
     }
 
-    func tabDidChange(_ tab: BrowserTab) { if tab.url != nil { scheduleSave() } }
+    func tabDidChange(_ tab: BrowserTab) {
+        if tab.url != nil {
+            scheduleSave()
+            libraryManager?.recordVisit(title: tab.title, url: tab.url)
+        }
+    }
 
     private func updateLifecycleStates() {
         for tab in tabs { tab.lifecycleState = tab.id == selectedTabID ? .active : .background }

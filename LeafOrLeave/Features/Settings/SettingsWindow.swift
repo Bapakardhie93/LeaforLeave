@@ -8,7 +8,8 @@ struct SettingsWindow: View {
     @State private var confirmWebsiteData = false
     var body: some View {
         NavigationSplitView { List(SettingsSection.allCases, selection: $section) { item in Label(item.title, systemImage: icon(item)).tag(item) }.navigationTitle("Settings") } detail: { Form { content }.formStyle(.grouped).navigationTitle(section.title) }
-            .frame(width: 760, height: 540).alert("Clear all website data?", isPresented: $confirmWebsiteData) { Button("Cancel", role: .cancel) {}; Button("Clear and Log Out", role: .destructive) { WKWebsiteDataStore.default().removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast) {} } } message: { Text("This clears cookies and cache and signs you out of websites.") }
+            .frame(minWidth: 680, idealWidth: 780, minHeight: 480, idealHeight: 560)
+            .alert("Clear all website data?", isPresented: $confirmWebsiteData) { Button("Cancel", role: .cancel) {}; Button("Clear and Log Out", role: .destructive) { WKWebsiteDataStore.default().removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast) {} } } message: { Text("This clears cookies and cache and signs you out of websites.") }
     }
     @ViewBuilder private var content: some View {
         switch section {
@@ -19,7 +20,7 @@ struct SettingsWindow: View {
         case .network: Toggle("Connectivity warnings", isOn: $settings.value.connectivityWarnings); Toggle("Show offline overlay", isOn: $settings.value.offlineOverlay); Button("Open Network Settings", action: RecoveryAssistant.openNetworkSettings)
         case .examProtection: Toggle("Suggest protection on quiz pages", isOn: $settings.value.suggestExamProtection); Text("Protected tabs: \(tabs.tabs.filter(\.isExamProtected).count)"); Button("Clear recovery data", role: .destructive) { exams.clear() }
         case .media: Toggle("Automatically enter PiP", isOn: $settings.value.autoPiP); Toggle("Keep media tabs active", isOn: $settings.value.keepMediaAlive); Button("Reset media settings") { settings.resetMedia() }
-        case .privacy: Button("Clear Website Data…", role: .destructive) { confirmWebsiteData = true }; Button("Clear Download History") { downloads.clearCompleted() }; Text("Private browsing is planned for a future sprint.").foregroundStyle(.secondary)
+        case .privacy: Button("Open macOS Privacy Settings") { if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera") { NSWorkspace.shared.open(url) } }; Button("Clear Website Data…", role: .destructive) { confirmWebsiteData = true }; Button("Clear Download History") { downloads.clearCompleted() }; Text("Private browsing is planned for a future sprint.").foregroundStyle(.secondary)
         case .appearance: Picker("Appearance", selection: $settings.value.appearance) { ForEach(LeafAppearance.allCases, id: \.self) { Text($0.rawValue).tag($0) } }; Toggle("Reduce transparency", isOn: $settings.value.reducedTransparency)
         case .advanced: Toggle("Diagnostics metrics", isOn: $settings.value.diagnosticsMetrics); Text("Diagnostics never includes URLs, cookies, passwords, form contents, or tokens.")
         }

@@ -15,7 +15,11 @@ struct BrowserToolbarButton: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(isEnabled ? Color.primary : Color.secondary.opacity(0.45))
-        .background(Color.white.opacity(isEnabled ? 0.06 : 0.02), in: RoundedRectangle(cornerRadius: 8))
+        .background(Color.white.opacity(isEnabled ? 0.045 : 0.015), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .strokeBorder(Color.white.opacity(isEnabled ? 0.055 : 0.02))
+        }
         .disabled(!isEnabled)
         .help(helpText)
         .accessibilityLabel(helpText)

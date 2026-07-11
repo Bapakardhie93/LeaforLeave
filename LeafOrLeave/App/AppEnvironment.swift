@@ -11,12 +11,14 @@ final class AppEnvironment {
     let downloadManager: DownloadManager
     let mediaCoordinator: MediaCoordinator
     let settings: SettingsStore
+    let libraryManager: LibraryManager
 
     init(browserConfiguration: BrowserConfiguration = .default) {
         let tabs = TabManager(
             webViewFactory: WebViewFactory(configuration: browserConfiguration),
             sessionStore: SessionStore()
         )
+        let library = LibraryManager(); libraryManager = library; tabs.libraryManager = library
         tabManager = tabs
         networkMonitor = NetworkMonitor()
         examProtection = ExamProtectionManager()

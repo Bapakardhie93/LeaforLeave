@@ -9,7 +9,30 @@ final class DownloadManager: NSObject, WKDownloadDelegate {
     private let key = "downloads.history.v1"
     override init() { super.init(); if let data = UserDefaults.standard.data(forKey: key), let value = try? JSONDecoder().decode([DownloadRecord].self, from: data) { records = value.map { var r = $0; if r.status == .downloading { r.status = .failed }; return r } } }
     func register(_ download: WKDownload) { download.delegate = self; let id = UUID(); ids[ObjectIdentifier(download)] = id; records.insert(.init(id: id, filename: "Download", sourceHost: download.originalRequest?.url?.host ?? "Unknown", destination: nil, progress: 0, bytesWritten: 0, totalBytes: 0, status: .downloading, errorMessage: nil, createdAt: Date()), at: 0); save() }
-    func download(_ download: WKDownload, decideDestinationUsing response: URLResponse, suggestedFilename: String, completionHandler: @escaping (URL?) -> Void) { let name = safeName(suggestedFilename); let url = uniqueURL(name); update(download) { $0.filename = name; $0.destination = url }; completionHandler(url) }
+    func download(_ download: WKDownload, decideDestinationUsing response: URLResponse,
+                  suggestedFilename: String, completionHandler: @escaping (URL?) -> Void) {
+        let name = safeName(suggestedFilename)
+        update(download) { $0.filename = name }
+
+        let panel = NSSavePanel()
+        panel.title = "Save Download"
+        panel.nameFieldStringValue = name
+        panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+        panel.canCreateDirectories = true
+        panel.prompt = "Download"
+        panel.message = "Choose where LeafOrLeave may save this file."
+        panel.begin { [weak self, weak download] response in
+            guard let self, let download else { completionHandler(nil); return }
+            guard response == .OK, let url = panel.url else {
+                self.update(download) { $0.status = .cancelled }
+                self.ids[ObjectIdentifier(download)] = nil
+                completionHandler(nil)
+                return
+            }
+            self.update(download) { $0.destination = url }
+            completionHandler(url)
+        }
+    }
     func downloadDidFinish(_ download: WKDownload) { update(download) { $0.status = .completed; $0.progress = 1 }; ids[ObjectIdentifier(download)] = nil }
     func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) { update(download) { $0.status = .failed; $0.errorMessage = error.localizedDescription }; ids[ObjectIdentifier(download)] = nil }
     func cancel(_ id: UUID) { if let pair = ids.first(where: { $0.value == id }) { /* WebKit owns cancellation handle; state remains actionable. */ ids[pair.key] = nil }; mutate(id) { $0.status = .cancelled } }

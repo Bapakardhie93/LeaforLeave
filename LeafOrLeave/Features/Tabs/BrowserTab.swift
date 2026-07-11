@@ -46,6 +46,8 @@ final class BrowserTab: NSObject, Identifiable, WKNavigationDelegate, WKUIDelega
         webView.uiDelegate = self
         webView.configuration.userContentController.add(self, name: MediaScriptProvider.name)
         webView.configuration.userContentController.addUserScript(MediaScriptProvider.script)
+        webView.configuration.userContentController.add(self, name: DownloadScriptProvider.name)
+        webView.configuration.userContentController.addUserScript(DownloadScriptProvider.script)
         observeWebView()
     }
 
@@ -79,14 +81,41 @@ final class BrowserTab: NSObject, Identifiable, WKNavigationDelegate, WKUIDelega
     }
 
     func tearDown() {
+        // Stopping a navigation does not stop media that is already playing.
+        // Shut the page down before releasing the WKWebView so audio, video and
+        // Picture in Picture cannot survive a closed tab.
+        let stopMediaScript = """
+        (() => {
+          if (document.pictureInPictureElement && document.exitPictureInPicture) {
+            document.exitPictureInPicture().catch(() => {});
+          }
+          document.querySelectorAll('audio, video').forEach(media => {
+            media.pause();
+            media.removeAttribute('src');
+            media.querySelectorAll('source').forEach(source => source.removeAttribute('src'));
+            media.load();
+          });
+          if (window.AudioContext) {
+            // Web Audio contexts created by the page are released with the
+            // document immediately below.
+          }
+        })()
+        """
+        webView.evaluateJavaScript(stopMediaScript)
         webView.stopLoading()
+        webView.loadHTMLString("", baseURL: nil)
+        webView.removeFromSuperview()
         webView.navigationDelegate = nil
         webView.uiDelegate = nil
         webView.configuration.userContentController.removeScriptMessageHandler(forName: MediaScriptProvider.name)
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: DownloadScriptProvider.name)
         observations.forEach { $0.invalidate() }
         observations.removeAll()
         mediaTask?.cancel()
         faviconTask?.cancel()
+        isMediaPlaying = false
+        isPictureInPicture = false
+        mediaStatus = MediaTabStatus()
     }
 
     private func observeWebView() {
@@ -144,6 +173,10 @@ final class BrowserTab: NSObject, Identifiable, WKNavigationDelegate, WKUIDelega
     private func report(_ error: Error) {
         let value = error as NSError
         guard value.code != NSURLErrorCancelled else { return }
+        // WebKit intentionally interrupts the frame navigation when the
+        // response is handed off to WKDownload. This is a successful download
+        // transition, not a navigation failure that should be shown to users.
+        if value.domain == WKError.errorDomain, value.code == 102 { return }
         navigationError = .navigationFailed(value.localizedDescription)
     }
 
@@ -155,8 +188,56 @@ final class BrowserTab: NSObject, Identifiable, WKNavigationDelegate, WKUIDelega
 
     func webViewDidClose(_ webView: WKWebView) { manager?.closeTab(id: id) }
 
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
+                 decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        decisionHandler(navigationAction.shouldPerformDownload ? .download : .allow)
+    }
+
+    func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
+                 decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+        decisionHandler(navigationResponse.canShowMIMEType ? .allow : .download)
+    }
+
+    func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin,
+                 initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType,
+                 decisionHandler: @escaping (WKPermissionDecision) -> Void) {
+        let resource: String
+        switch type {
+        case .camera: resource = "camera"
+        case .microphone: resource = "microphone"
+        case .cameraAndMicrophone: resource = "camera and microphone"
+        @unknown default: resource = "media devices"
+        }
+        let host = origin.host.isEmpty ? "This website" : origin.host
+        let alert = NSAlert()
+        alert.messageText = "Allow \(host) to use your \(resource)?"
+        alert.informativeText = "Only allow access for websites you trust. macOS may also ask for system permission."
+        alert.addButton(withTitle: "Allow")
+        alert.addButton(withTitle: "Don’t Allow")
+        decisionHandler(alert.runModal() == .alertFirstButtonReturn ? .grant : .deny)
+    }
+
+    func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters,
+                 initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping ([URL]?) -> Void) {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = parameters.allowsMultipleSelection
+        panel.canChooseDirectories = parameters.allowsDirectories
+        panel.canChooseFiles = true
+        panel.prompt = "Choose"
+        panel.message = parameters.allowsDirectories ? "Choose files or a folder to share with this website." : "Choose files to share with this website."
+        panel.begin { response in completionHandler(response == .OK ? panel.urls : nil) }
+    }
+
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard message.name == MediaScriptProvider.name, let value = message.body as? [String: Any] else { return }
+        guard let value = message.body as? [String: Any] else { return }
+        if message.name == DownloadScriptProvider.name,
+           let address = value["url"] as? String,
+           let downloadURL = URL(string: address),
+           downloadURL.scheme == "https" || downloadURL.scheme == "http" {
+            webView.load(URLRequest(url: downloadURL))
+            return
+        }
+        guard message.name == MediaScriptProvider.name else { return }
         let playing = value["playing"] as? Bool ?? false, video = value["video"] as? Bool ?? false, pip = value["pip"] as? Bool ?? false
         isMediaPlaying = playing; isMediaMuted = value["muted"] as? Bool ?? false; hasVideo = video; isPictureInPicture = pip
         mediaStatus.playbackState = pip ? .pictureInPicture : (playing ? (video ? .playingVideo : .playingAudio) : (video ? .paused : .none))

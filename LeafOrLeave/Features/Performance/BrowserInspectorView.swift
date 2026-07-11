@@ -2,11 +2,16 @@ import SwiftUI
 import Darwin
 
 struct BrowserInspectorView: View {
+    @Environment(\.dismiss) private var dismiss
     let manager: TabManager
     @Bindable var suspension: TabSuspensionManager
 
     var body: some View {
-        Form {
+        VStack(spacing: 0) {
+            HStack { Text("Browser Inspector").font(.headline); Spacer(); Button { dismiss() } label: { Image(systemName: "xmark").frame(width: 26, height: 26) }.buttonStyle(.plain).background(.white.opacity(0.07), in: Circle()) }
+                .padding(.horizontal, 20).padding(.vertical, 16)
+            Divider()
+            Form {
             Section("Browser Inspector") {
                 LabeledContent("RAM", value: ByteCountFormatter.string(fromByteCount: residentMemory, countStyle: .memory))
                 LabeledContent("CPU estimate", value: "System managed")
@@ -25,7 +30,8 @@ struct BrowserInspectorView: View {
                 }
                 Button("Optimize Now") { suspension.evaluate() }
             }
-        }.formStyle(.grouped).frame(width: 460, height: 490).padding()
+            }.formStyle(.grouped)
+        }.frame(minWidth: 460, idealWidth: 520, minHeight: 480, idealHeight: 560)
     }
 
     private func count(_ state: BrowserTabState) -> Int { manager.tabs.filter { $0.lifecycleState == state }.count }
