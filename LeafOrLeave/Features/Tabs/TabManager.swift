@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import SwiftUI
+import UniformTypeIdentifiers
 import WebKit
 
 @MainActor
@@ -10,6 +11,8 @@ final class TabManager {
     var selectedTabID: UUID?
     weak var downloadManager: DownloadManager?
     weak var libraryManager: LibraryManager?
+    weak var settings: SettingsStore?
+    weak var passwordVault: PasswordVault?
 
     var selectedTab: BrowserTab? { tabs.first { $0.id == selectedTabID } }
     private let webViewFactory: WebViewFactory
@@ -18,10 +21,15 @@ final class TabManager {
     private var closedTabs: [TabSessionRecord] = []
     private var saveTask: Task<Void, Never>?
 
-    init(webViewFactory: WebViewFactory, sessionStore: SessionStore) {
+    init(webViewFactory: WebViewFactory, sessionStore: SessionStore,
+         restoresPreviousSession: Bool = true) {
         self.webViewFactory = webViewFactory
         self.sessionStore = sessionStore
-        restoreSession()
+        if restoresPreviousSession {
+            restoreSession()
+        } else {
+            createTab()
+        }
     }
 
     @discardableResult
@@ -29,6 +37,7 @@ final class TabManager {
                    configuration: WKWebViewConfiguration? = nil) -> BrowserTab {
         let webView = configuration.map(webViewFactory.makeWebView(configuration:)) ?? webViewFactory.makeWebView()
         let tab = BrowserTab(webView: webView, url: url)
+        tab.webView.isInspectable = settings?.value.developerMode == true && settings?.value.webInspector == true
         tab.manager = self
         tabs.append(tab)
         if activate { selectTab(id: tab.id) }
@@ -91,6 +100,15 @@ final class TabManager {
         tab.isPinned = record.isPinned
     }
 
+    func closeOtherTabs(keeping id: UUID) {
+        for tabID in tabs.map(\.id).filter({ $0 != id }) { closeTab(id: tabID) }
+    }
+
+    func closeTabsToRight(of id: UUID) {
+        guard let index = tabs.firstIndex(where: { $0.id == id }), index + 1 < tabs.count else { return }
+        for tabID in tabs[(index + 1)...].map(\.id).reversed() { closeTab(id: tabID) }
+    }
+
     func moveTab(from source: IndexSet, to destination: Int) {
         tabs.move(fromOffsets: source, toOffset: destination)
         saveSession()
@@ -119,10 +137,35 @@ final class TabManager {
     }
 
     func navigateSelected(to input: String) -> Bool {
-        guard let url = resolver.resolve(input), let tab = selectedTab else { return false }
+        let preferences = settings?.value
+        guard let url = resolver.resolve(input,
+                                         engine: preferences?.searchEngine ?? .google,
+                                         customTemplate: preferences?.customSearchTemplate ?? ""),
+              let tab = selectedTab else { return false }
         tab.navigationError = nil
         tab.load(url)
         return true
+    }
+
+    @discardableResult
+    func createTab(navigatingTo input: String) -> Bool {
+        let preferences = settings?.value
+        guard let url = resolver.resolve(input,
+                                         engine: preferences?.searchEngine ?? .google,
+                                         customTemplate: preferences?.customSearchTemplate ?? "") else { return false }
+        createTab(opening: url)
+        return true
+    }
+
+    func openLocalFile() {
+        let panel = NSOpenPanel()
+        panel.title = "Open File"
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [.html, .pdf, .plainText, .image]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let tab = selectedTab?.url == nil ? selectedTab! : createTab()
+        tab.webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
     }
 
     func tabDidChange(_ tab: BrowserTab) {

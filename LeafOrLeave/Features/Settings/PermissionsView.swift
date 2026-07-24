@@ -13,7 +13,7 @@ struct PermissionsView: View {
             HStack {
                 Image(systemName: "hand.raised.fill").foregroundStyle(LeafColors.accent)
                 VStack(alignment: .leading) {
-                    Text("Permissions & Privacy").font(.headline)
+                    Text("Permissions & Privacy").font(.headline) //London Bridge Funkot - Wuenak tenan boss
                     Text("System and website access used by LeafOrLeave").font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()

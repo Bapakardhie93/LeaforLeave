@@ -1,7 +1,11 @@
 import Foundation
 import Observation
 
-enum MemoryPressureLevel { case normal, warning, critical }
+enum MemoryPressureLevel: String {
+    case normal, warning, critical
+
+    var title: String { rawValue.capitalized }
+}
 
 @MainActor @Observable
 final class MemoryPressureMonitor {

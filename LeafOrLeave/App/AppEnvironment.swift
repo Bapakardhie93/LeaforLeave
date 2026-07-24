@@ -12,11 +12,18 @@ final class AppEnvironment {
     let mediaCoordinator: MediaCoordinator
     let settings: SettingsStore
     let libraryManager: LibraryManager
+    let passwordVault: PasswordVault
 
     init(browserConfiguration: BrowserConfiguration = .default) {
+        let preferences = SettingsStore()
+        settings = preferences
+        LeafLogStore.shared.setCollectionEnabled(preferences.value.diagnosticsMetrics)
+        let vault = PasswordVault()
+        passwordVault = vault
         let tabs = TabManager(
             webViewFactory: WebViewFactory(configuration: browserConfiguration),
-            sessionStore: SessionStore()
+            sessionStore: SessionStore(),
+            restoresPreviousSession: preferences.value.reopenSession
         )
         let library = LibraryManager(); libraryManager = library; tabs.libraryManager = library
         tabManager = tabs
@@ -24,10 +31,16 @@ final class AppEnvironment {
         examProtection = ExamProtectionManager()
         suspensionManager = TabSuspensionManager(tabs: tabs)
         workspaceManager = WorkspaceManager()
-        let downloads = DownloadManager(); downloadManager = downloads; tabs.downloadManager = downloads
+        tabs.settings = preferences
+        tabs.passwordVault = vault
+        let downloads = DownloadManager(asksForDestination: { [weak settings] in
+            settings?.value.askDownloadDestination ?? false
+        })
+        downloadManager = downloads; tabs.downloadManager = downloads
         mediaCoordinator = MediaCoordinator(tabs: tabs)
-        settings = SettingsStore()
+        suspensionManager.apply(preferences.value)
         workspaceManager.assignUnownedTabs(tabs.tabs.map(\.id))
         AppDelegate.tabManager = tabs
+        LeafLog.info("Application services initialized", category: .app)
     }
 }

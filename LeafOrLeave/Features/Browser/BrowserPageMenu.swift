@@ -14,33 +14,47 @@ struct BrowserPageMenu: View {
     let history: () -> Void
     let downloads: () -> Void
     let permissions: () -> Void
+    let performance: () -> Void
+    let equalizer: () -> Void
 
     var body: some View {
         Menu {
-            Button("New Tab", action: newTab)
-            Button("Find in Page…", action: find)
+            Button(action: newTab) { Label("New Tab", systemImage: "plus.square") }
+                .keyboardShortcut("t", modifiers: .command)
+            Button(action: find) { Label("Find in Page…", systemImage: "text.magnifyingglass") }
             Divider()
             Menu("Zoom — \(zoomPercent)%") {
                 Button("Zoom In", action: zoomIn)
                 Button("Zoom Out", action: zoomOut)
                 Button("Actual Size", action: actualSize)
             }
-            Button("Enter Full Screen", action: fullScreen)
+            Button(action: fullScreen) { Label("Enter Full Screen", systemImage: "arrow.up.left.and.arrow.down.right") }
             Divider()
-            Button("Copy Link", action: copyLink)
-            Button("Print…", action: printPage)
+            Button(action: copyLink) { Label("Copy Page Link", systemImage: "link") }
+            Button(action: printPage) { Label("Print…", systemImage: "printer") }
             Divider()
-            Button("Bookmarks", action: bookmarks)
-            Button("History", action: history)
-            Button("Downloads", action: downloads)
+            Button(action: bookmarks) { Label("Bookmarks", systemImage: "bookmark") }
+            Button(action: history) { Label("History", systemImage: "clock.arrow.circlepath") }
+            Button(action: downloads) { Label("Downloads", systemImage: "arrow.down.circle") }
             Divider()
-            Button("Permissions & Privacy…", action: permissions)
+            Button(action: performance) { Label("Performance", systemImage: "gauge.with.dots.needle.67percent") }
+            Button(action: equalizer) { Label("Equalizer", systemImage: "slider.vertical.3") }
+            Button(action: permissions) { Label("Permissions & Privacy…", systemImage: "hand.raised") }
+            Divider()
+            SettingsLink { Label("Settings…", systemImage: "gearshape") }
+            Link(destination: URL(string: "https://github.com/Bapakardhie93/LeaforLeave")!) {
+                Label("Help & Feedback", systemImage: "questionmark.circle")
+            }
         } label: {
-            Image(systemName: "ellipsis.vertical")
-                .font(.system(size: 13, weight: .semibold))
-                .frame(width: 30, height: 30)
-                .background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 9))
+            Image(systemName: "ellipsis")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(width: BrowserChromeMetrics.controlSize, height: BrowserChromeMetrics.controlSize)
         }
-        .menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 30).help("Browser Menu")
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .frame(width: BrowserChromeMetrics.controlSize)
+        .cursorHelp("Customize and control LeafOrLeave")
+        .accessibilityLabel("LeafOrLeave menu")
     }
 }

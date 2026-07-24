@@ -11,4 +11,6 @@ struct BrowserWorkspace: Identifiable, Codable, Equatable {
     var createdAt: Date
     var updatedAt: Date
     var isDefault: Bool
+    var homePage: String?
+    var accentName: String?
 }

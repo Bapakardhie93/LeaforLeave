@@ -73,7 +73,15 @@ private struct DownloadRow: View {
                 .frame(width: 42, height: 42).background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 11))
             VStack(alignment: .leading, spacing: 6) {
                 HStack { Text(item.filename).font(.subheadline.weight(.semibold)).lineLimit(1); Spacer(); Text(statusText).font(.caption).foregroundStyle(color) }
-                HStack { Text(item.sourceHost); Text("•"); Text(item.createdAt, style: .relative) }
+                HStack {
+                    if let transferText {
+                        Text(transferText)
+                        Text("•")
+                    }
+                    Text(item.sourceHost)
+                    Text("•")
+                    Text(item.createdAt, style: .relative)
+                }
                     .font(.caption).foregroundStyle(.secondary)
                 if item.status == .downloading { ProgressView(value: item.progress).tint(LeafColors.accent) }
                 if let message = item.errorMessage, item.status == .failed { Text(message).font(.caption2).foregroundStyle(.red).lineLimit(1) }
@@ -93,5 +101,15 @@ private struct DownloadRow: View {
 
     private var icon: String { switch item.status { case .completed: "checkmark.circle.fill"; case .failed: "exclamationmark.triangle.fill"; case .cancelled: "xmark.circle.fill"; default: "arrow.down.circle.fill" } }
     private var color: Color { switch item.status { case .completed: LeafColors.secure; case .failed: .red; case .cancelled: .secondary; default: LeafColors.accent } }
-    private var statusText: String { item.status == .downloading ? "\(Int(item.progress * 100))%" : item.status.rawValue.capitalized }
+    private var statusText: String {
+        item.status == .downloading
+            ? LeafFormatting.percentage(item.progress)
+            : item.status.rawValue.capitalized
+    }
+    private var transferText: String? {
+        guard item.bytesWritten > 0 else { return nil }
+        let completed = LeafFormatting.fileSize(item.bytesWritten)
+        guard item.totalBytes > 0 else { return completed }
+        return "\(completed) of \(LeafFormatting.fileSize(item.totalBytes))"
+    }
 }

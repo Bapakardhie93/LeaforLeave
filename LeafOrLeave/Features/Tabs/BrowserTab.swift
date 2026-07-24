@@ -2,8 +2,35 @@ import Foundation
 import Observation
 import WebKit
 import AppKit
+import AVFoundation
 
 enum BrowserTabState: String, Codable { case active, background, sleeping, frozen, discarded }
+
+struct PasswordAutofillAccount: Identifiable, Equatable {
+    let id: UUID
+    let username: String
+}
+
+struct PasswordSaveOffer: Identifiable, Equatable {
+    let id: UUID
+    let host: String
+    let username: String
+    let isUpdate: Bool
+}
+
+private struct PendingPasswordSubmission {
+    let id: UUID
+    let host: String
+    let username: String
+    let password: String
+    let documentID: String
+    let submittedAt: Date
+}
+
+private struct ObservedPasswordPageState {
+    let documentID: String
+    let hasPassword: Bool
+}
 
 @MainActor
 @Observable
@@ -30,11 +57,25 @@ final class BrowserTab: NSObject, Identifiable, WKNavigationDelegate, WKUIDelega
     var isUploading = false
     var lifecycleSnapshot: WebViewLifecycleSnapshot?
     var mediaStatus = MediaTabStatus()
+    var consoleMessages: [DeveloperConsoleMessage] = []
+    var passwordAutofillAccounts: [PasswordAutofillAccount] = []
+    var passwordAutofillHost: String?
+    var passwordSaveOffer: PasswordSaveOffer?
 
     weak var manager: TabManager?
     private var observations: [NSKeyValueObservation] = []
     private var mediaTask: Task<Void, Never>?
     private var faviconTask: Task<Void, Never>?
+    private var lastCredentialCapture: (host: String, username: String, passwordFingerprint: Int, date: Date)?
+    private var autofillInProgress = false
+    private var passwordAutofillDismissedForNavigation = false
+    private var possibleUsername: (host: String, value: String, date: Date)?
+    private var pendingPasswordSubmission: PendingPasswordSubmission?
+    private var saveOfferCredential: PendingPasswordSubmission?
+    private var latestPasswordPageState: ObservedPasswordPageState?
+    private var passwordSubmissionConfirmationTask: Task<Void, Never>?
+    private var pendingPasswordExpiryTask: Task<Void, Never>?
+    private var passwordSaveOfferExpiryTask: Task<Void, Never>?
 
     init(id: UUID = UUID(), webView: WKWebView, title: String = "New Tab", url: URL? = nil) {
         self.id = id
@@ -46,8 +87,10 @@ final class BrowserTab: NSObject, Identifiable, WKNavigationDelegate, WKUIDelega
         webView.uiDelegate = self
         webView.configuration.userContentController.add(self, name: MediaScriptProvider.name)
         webView.configuration.userContentController.addUserScript(MediaScriptProvider.script)
-        webView.configuration.userContentController.add(self, name: DownloadScriptProvider.name)
-        webView.configuration.userContentController.addUserScript(DownloadScriptProvider.script)
+        webView.configuration.userContentController.add(self, name: DeveloperConsoleScriptProvider.name)
+        webView.configuration.userContentController.addUserScript(DeveloperConsoleScriptProvider.script)
+        webView.configuration.userContentController.add(self, name: PasswordScriptProvider.name)
+        webView.configuration.userContentController.addUserScript(PasswordScriptProvider.script)
         observeWebView()
     }
 
@@ -108,11 +151,19 @@ final class BrowserTab: NSObject, Identifiable, WKNavigationDelegate, WKUIDelega
         webView.navigationDelegate = nil
         webView.uiDelegate = nil
         webView.configuration.userContentController.removeScriptMessageHandler(forName: MediaScriptProvider.name)
-        webView.configuration.userContentController.removeScriptMessageHandler(forName: DownloadScriptProvider.name)
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: DeveloperConsoleScriptProvider.name)
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: PasswordScriptProvider.name)
         observations.forEach { $0.invalidate() }
         observations.removeAll()
         mediaTask?.cancel()
         faviconTask?.cancel()
+        passwordSubmissionConfirmationTask?.cancel()
+        pendingPasswordExpiryTask?.cancel()
+        passwordSaveOfferExpiryTask?.cancel()
+        pendingPasswordSubmission = nil
+        saveOfferCredential = nil
+        passwordSaveOffer = nil
+        possibleUsername = nil
         isMediaPlaying = false
         isPictureInPicture = false
         mediaStatus = MediaTabStatus()
@@ -168,7 +219,24 @@ final class BrowserTab: NSObject, Identifiable, WKNavigationDelegate, WKUIDelega
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation?, withError error: Error) { report(error) }
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation?, withError error: Error) { report(error) }
-    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { navigationError = .processTerminated }
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        LeafLog.error("Web content process terminated", category: .browser)
+        navigationError = .processTerminated
+    }
+
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation?) {
+        passwordAutofillDismissedForNavigation = false
+        passwordAutofillAccounts = []
+        passwordAutofillHost = nil
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation?) {
+        let captureEnabled = manager?.settings?.value.offerToSavePasswords == true
+        webView.evaluateJavaScript("""
+        window.__leafPasswordCaptureEnabled = \(captureEnabled ? "true" : "false");
+        window.__leafPasswordManagerRefresh?.();
+        """)
+    }
 
     private func report(_ error: Error) {
         let value = error as NSError
@@ -176,7 +244,27 @@ final class BrowserTab: NSObject, Identifiable, WKNavigationDelegate, WKUIDelega
         // WebKit intentionally interrupts the frame navigation when the
         // response is handed off to WKDownload. This is a successful download
         // transition, not a navigation failure that should be shown to users.
-        if value.domain == WKError.errorDomain, value.code == 102 { return }
+        let webKitDomains = [WKError.errorDomain, "WebKitErrorDomain"]
+        if webKitDomains.contains(value.domain),
+           value.code == 102 { return } // WebKit's frame-load-interrupted-by-policy code.
+
+        // Old session/history entries may still contain the HTTPS URL inferred
+        // before LAN-aware address resolution was added. If that local HTTPS
+        // endpoint refuses the connection, retry its HTTP endpoint once. The
+        // fallback can never apply to public hosts or to an already-HTTP URL.
+        if value.domain == NSURLErrorDomain,
+           [NSURLErrorCannotConnectToHost, NSURLErrorTimedOut].contains(value.code),
+           let failedURL = value.userInfo[NSURLErrorFailingURLErrorKey] as? URL ?? webView.url,
+           let fallbackURL = URLResolver().localHTTPFallback(for: failedURL) {
+            LeafLog.notice("Retrying a local-network address over HTTP", category: .browser)
+            navigationError = nil
+            load(fallbackURL)
+            return
+        }
+        LeafLog.warning(
+            "Navigation failed (\(value.domain) \(value.code))",
+            category: .browser
+        )
         navigationError = .navigationFailed(value.localizedDescription)
     }
 
@@ -195,18 +283,30 @@ final class BrowserTab: NSObject, Identifiable, WKNavigationDelegate, WKUIDelega
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
                  decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
-        decisionHandler(navigationResponse.canShowMIMEType ? .allow : .download)
+        let response = navigationResponse.response
+        let contentDisposition = (response as? HTTPURLResponse)?
+            .value(forHTTPHeaderField: "Content-Disposition")?.lowercased() ?? ""
+        let mimeType = response.mimeType?.lowercased() ?? ""
+        let attachment = contentDisposition.contains("attachment")
+        let downloadableMIMETypes: Set<String> = [
+            "application/octet-stream", "application/x-apple-diskimage",
+            "application/x-diskcopy", "application/zip", "application/x-zip-compressed",
+            "application/x-7z-compressed", "application/x-rar-compressed"
+        ]
+        let shouldDownload = attachment || downloadableMIMETypes.contains(mimeType) || !navigationResponse.canShowMIMEType
+        decisionHandler(shouldDownload ? .download : .allow)
     }
 
     func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin,
                  initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType,
                  decisionHandler: @escaping (WKPermissionDecision) -> Void) {
         let resource: String
+        let mediaTypes: [AVMediaType]
         switch type {
-        case .camera: resource = "camera"
-        case .microphone: resource = "microphone"
-        case .cameraAndMicrophone: resource = "camera and microphone"
-        @unknown default: resource = "media devices"
+        case .camera: resource = "camera"; mediaTypes = [.video]
+        case .microphone: resource = "microphone"; mediaTypes = [.audio]
+        case .cameraAndMicrophone: resource = "camera and microphone"; mediaTypes = [.video, .audio]
+        @unknown default: resource = "media devices"; mediaTypes = []
         }
         let host = origin.host.isEmpty ? "This website" : origin.host
         let alert = NSAlert()
@@ -214,7 +314,10 @@ final class BrowserTab: NSObject, Identifiable, WKNavigationDelegate, WKUIDelega
         alert.informativeText = "Only allow access for websites you trust. macOS may also ask for system permission."
         alert.addButton(withTitle: "Allow")
         alert.addButton(withTitle: "Don’t Allow")
-        decisionHandler(alert.runModal() == .alertFirstButtonReturn ? .grant : .deny)
+        guard alert.runModal() == .alertFirstButtonReturn else { decisionHandler(.deny); return }
+        requestSystemMediaAccess(mediaTypes) { granted in
+            decisionHandler(granted ? .grant : .deny)
+        }
     }
 
     func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters,
@@ -230,11 +333,40 @@ final class BrowserTab: NSObject, Identifiable, WKNavigationDelegate, WKUIDelega
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let value = message.body as? [String: Any] else { return }
-        if message.name == DownloadScriptProvider.name,
-           let address = value["url"] as? String,
-           let downloadURL = URL(string: address),
-           downloadURL.scheme == "https" || downloadURL.scheme == "http" {
-            webView.load(URLRequest(url: downloadURL))
+        if message.name == PasswordScriptProvider.name {
+            let sourceHost = (value["host"] as? String).flatMap {
+                $0.isEmpty ? nil : $0
+            } ?? message.frameInfo.securityOrigin.host
+            switch value["type"] as? String {
+            case "fillableForm":
+                let username = (value["username"] as? String)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                rememberPossibleUsername(username, for: sourceHost)
+                guard value["passwordKind"] as? String != "new" else { break }
+                attemptPasswordAutofill(
+                    usernameHint: username.isEmpty
+                        ? recentPossibleUsername(for: sourceHost)
+                        : username
+                )
+            case "submitted":
+                stageCredentialSubmission(value, sourceHost: sourceHost)
+            case "pageState":
+                handlePasswordPageState(value)
+            default:
+                break
+            }
+            return
+        }
+        if message.name == DeveloperConsoleScriptProvider.name {
+            guard manager?.settings?.value.captureConsoleLogs != false else { return }
+            let item = DeveloperConsoleMessage(
+                level: value["level"] as? String ?? "log",
+                message: value["message"] as? String ?? "",
+                source: value["source"] as? String ?? "",
+                date: Date()
+            )
+            consoleMessages.append(item)
+            if consoleMessages.count > 500 { consoleMessages.removeFirst(consoleMessages.count - 500) }
             return
         }
         guard message.name == MediaScriptProvider.name else { return }
@@ -244,6 +376,327 @@ final class BrowserTab: NSObject, Identifiable, WKNavigationDelegate, WKUIDelega
         mediaStatus.isMuted = isMediaMuted; mediaStatus.duration = value["duration"] as? Double; mediaStatus.currentTime = value["current"] as? Double
     }
 
+    private func rememberPossibleUsername(_ username: String, for host: String) {
+        let trimmed = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedHost = PasswordCredential.normalized(host)
+        guard !trimmed.isEmpty, !normalizedHost.isEmpty else { return }
+        possibleUsername = (normalizedHost, trimmed, Date())
+    }
+
+    private func recentPossibleUsername(for host: String) -> String? {
+        guard let possibleUsername,
+              possibleUsername.host == PasswordCredential.normalized(host),
+              Date().timeIntervalSince(possibleUsername.date) < 300 else {
+            return nil
+        }
+        return possibleUsername.value
+    }
+
+    private func attemptPasswordAutofill(usernameHint: String? = nil) {
+        guard manager?.settings?.value.autoFillPasswords == true,
+              let host = webView.url?.host,
+              let vault = manager?.passwordVault,
+              vault.hasStoredCredential(for: host),
+              !autofillInProgress else { return }
+        autofillInProgress = true
+
+        Task { [weak self] in
+            guard let self else { return }
+            defer { autofillInProgress = false }
+            let minutes = manager?.settings?.value.passwordAutoLockMinutes ?? 5
+            guard await vault.unlock(
+                reason: "Fill your saved password for \(host) in LeafOrLeave.",
+                autoLockMinutes: minutes
+            ) else { return }
+
+            let candidates = vault.credentials(for: host)
+            guard !candidates.isEmpty else { return }
+            let hint = usernameHint?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+            let credential: PasswordCredential?
+            if !hint.isEmpty {
+                credential = candidates.first {
+                    $0.username.compare(hint, options: .caseInsensitive) == .orderedSame
+                }
+            } else if candidates.count == 1 {
+                credential = candidates[0]
+            } else {
+                credential = nil
+            }
+
+            guard let credential else {
+                presentPasswordAutofillAccounts(
+                    candidates,
+                    matching: hint,
+                    host: host
+                )
+                return
+            }
+
+            passwordAutofillDismissedForNavigation = true
+            passwordAutofillAccounts = []
+            passwordAutofillHost = nil
+            await fill(credential)
+        }
+    }
+
+    private func presentPasswordAutofillAccounts(
+        _ credentials: [PasswordCredential],
+        matching hint: String,
+        host: String
+    ) {
+        guard credentials.count > 1,
+              !passwordAutofillDismissedForNavigation else { return }
+        let matching = hint.isEmpty
+            ? credentials
+            : credentials.filter {
+                $0.username.localizedCaseInsensitiveContains(hint)
+            }
+        passwordAutofillAccounts = (matching.isEmpty ? credentials : matching).map {
+            PasswordAutofillAccount(id: $0.id, username: $0.username)
+        }
+        passwordAutofillHost = host
+    }
+
+    func dismissPasswordAutofillAccounts() {
+        passwordAutofillDismissedForNavigation = true
+        passwordAutofillAccounts = []
+        passwordAutofillHost = nil
+    }
+
+    func selectPasswordAutofillAccount(id: UUID) {
+        guard manager?.settings?.value.autoFillPasswords == true,
+              let host = passwordAutofillHost,
+              let vault = manager?.passwordVault,
+              !autofillInProgress else { return }
+        if let selectedAccount = passwordAutofillAccounts.first(where: { $0.id == id }) {
+            rememberPossibleUsername(selectedAccount.username, for: host)
+        }
+        passwordAutofillDismissedForNavigation = true
+        passwordAutofillAccounts = []
+        passwordAutofillHost = nil
+        autofillInProgress = true
+
+        Task { [weak self] in
+            guard let self else { return }
+            defer { autofillInProgress = false }
+            let minutes = manager?.settings?.value.passwordAutoLockMinutes ?? 5
+            guard await vault.unlock(
+                reason: "Fill your saved password for \(host) in LeafOrLeave.",
+                autoLockMinutes: minutes
+            ), let credential = vault.credentials(for: host).first(where: { $0.id == id }) else {
+                return
+            }
+            await fill(credential, replacingExistingValues: true)
+        }
+    }
+
+    private func fill(
+        _ credential: PasswordCredential,
+        replacingExistingValues: Bool = false
+    ) async {
+        rememberPossibleUsername(credential.username, for: credential.host)
+        guard let script = PasswordScriptProvider.autofillScript(
+            username: credential.username,
+            password: credential.password,
+            replacingExistingValues: replacingExistingValues
+        ) else { return }
+        _ = try? await webView.evaluateJavaScript(script)
+    }
+
+    private func stageCredentialSubmission(_ value: [String: Any], sourceHost: String) {
+        guard manager?.settings?.value.offerToSavePasswords == true,
+              let password = value["password"] as? String,
+              !sourceHost.isEmpty, !password.isEmpty,
+              let vault = manager?.passwordVault else { return }
+        let host = PasswordCredential.normalized(sourceHost)
+        let submittedUsername = (value["username"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let trimmedUsername = submittedUsername.isEmpty
+            ? recentPossibleUsername(for: host) ?? ""
+            : submittedUsername
+        guard !host.isEmpty, !trimmedUsername.isEmpty else { return }
+        rememberPossibleUsername(trimmedUsername, for: host)
+
+        if vault.credentials(for: host).contains(where: {
+            $0.username == trimmedUsername && $0.password == password
+        }) {
+            pendingPasswordSubmission = nil
+            return
+        }
+
+        let passwordFingerprint = password.hashValue
+        if let previous = lastCredentialCapture,
+           previous.host == host,
+           previous.username == trimmedUsername,
+           previous.passwordFingerprint == passwordFingerprint,
+           Date().timeIntervalSince(previous.date) < 10 { return }
+        lastCredentialCapture = (host, trimmedUsername, passwordFingerprint, Date())
+
+        passwordSubmissionConfirmationTask?.cancel()
+        dismissPasswordSaveOffer()
+        pendingPasswordSubmission = PendingPasswordSubmission(
+            id: UUID(),
+            host: host,
+            username: trimmedUsername,
+            password: password,
+            documentID: value["documentID"] as? String ?? "",
+            submittedAt: Date()
+        )
+        LeafLog.debug("Password submission held for success confirmation", category: .passwords)
+        let pendingID = pendingPasswordSubmission?.id
+        pendingPasswordExpiryTask?.cancel()
+        pendingPasswordExpiryTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(180))
+            guard !Task.isCancelled,
+                  self?.pendingPasswordSubmission?.id == pendingID else { return }
+            self?.pendingPasswordSubmission = nil
+        }
+    }
+
+    private func handlePasswordPageState(_ value: [String: Any]) {
+        let documentID = value["documentID"] as? String ?? ""
+        let hasPassword = value["hasPassword"] as? Bool ?? false
+        latestPasswordPageState = ObservedPasswordPageState(
+            documentID: documentID,
+            hasPassword: hasPassword
+        )
+
+        if hasPassword {
+            passwordSubmissionConfirmationTask?.cancel()
+            return
+        }
+
+        guard let pending = pendingPasswordSubmission else { return }
+        guard Date().timeIntervalSince(pending.submittedAt) < 180 else {
+            pendingPasswordSubmission = nil
+            return
+        }
+
+        let reason = value["reason"] as? String ?? ""
+        let movedToAnotherDocument = !documentID.isEmpty &&
+            documentID != pending.documentID
+        let submittedFormDisappeared = ["mutation", "history", "delayed"]
+            .contains(reason)
+        guard movedToAnotherDocument || submittedFormDisappeared else { return }
+
+        passwordSubmissionConfirmationTask?.cancel()
+        let delay = movedToAnotherDocument ? 0.35 : 1.1
+        passwordSubmissionConfirmationTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled, let self,
+                  pendingPasswordSubmission?.id == pending.id,
+                  latestPasswordPageState?.hasPassword == false else { return }
+            presentPasswordSaveOffer(for: pending)
+        }
+    }
+
+    private func presentPasswordSaveOffer(for pending: PendingPasswordSubmission) {
+        guard manager?.settings?.value.offerToSavePasswords == true,
+              let vault = manager?.passwordVault else {
+            pendingPasswordSubmission = nil
+            return
+        }
+        pendingPasswordExpiryTask?.cancel()
+        pendingPasswordExpiryTask = nil
+        pendingPasswordSubmission = nil
+        saveOfferCredential = pending
+        let isUpdate = vault.credentials(for: pending.host).contains {
+            $0.username.compare(
+                pending.username,
+                options: .caseInsensitive
+            ) == .orderedSame
+        }
+        passwordSaveOffer = PasswordSaveOffer(
+            id: pending.id,
+            host: pending.host,
+            username: pending.username,
+            isUpdate: isUpdate
+        )
+        LeafLog.notice(
+            isUpdate ? "Password update offer presented" : "Password save offer presented",
+            category: .passwords
+        )
+        passwordSaveOfferExpiryTask?.cancel()
+        passwordSaveOfferExpiryTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(120))
+            guard !Task.isCancelled else { return }
+            self?.dismissPasswordSaveOffer()
+        }
+    }
+
+    func acceptPasswordSaveOffer() {
+        guard let pending = saveOfferCredential,
+              let vault = manager?.passwordVault else {
+            dismissPasswordSaveOffer()
+            return
+        }
+        passwordSaveOfferExpiryTask?.cancel()
+        passwordSaveOffer = nil
+        saveOfferCredential = nil
+
+        Task {
+            let minutes = manager?.settings?.value.passwordAutoLockMinutes ?? 5
+            guard await vault.unlock(
+                reason: "Save a password securely for \(pending.host).",
+                autoLockMinutes: minutes
+            ) else { return }
+            do {
+                try vault.save(
+                    host: pending.host,
+                    username: pending.username,
+                    password: pending.password
+                )
+                LeafLog.notice("Credential saved to macOS Keychain", category: .passwords)
+            } catch {
+                let value = error as NSError
+                LeafLog.error(
+                    "Keychain save failed (\(value.domain) \(value.code))",
+                    category: .passwords
+                )
+                let errorAlert = NSAlert(error: error)
+                errorAlert.runModal()
+            }
+        }
+    }
+
+    func dismissPasswordSaveOffer() {
+        passwordSaveOfferExpiryTask?.cancel()
+        passwordSaveOfferExpiryTask = nil
+        passwordSaveOffer = nil
+        saveOfferCredential = nil
+    }
+
     func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) { manager?.downloadManager?.register(download) }
     func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) { manager?.downloadManager?.register(download) }
+
+    private func requestSystemMediaAccess(_ mediaTypes: [AVMediaType], completion: @escaping (Bool) -> Void) {
+        guard let mediaType = mediaTypes.first else { completion(true); return }
+        let remaining = Array(mediaTypes.dropFirst())
+        switch AVCaptureDevice.authorizationStatus(for: mediaType) {
+        case .authorized:
+            requestSystemMediaAccess(remaining, completion: completion)
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: mediaType) { [weak tab = self] granted in
+                Task { @MainActor [weak tab] in
+                    guard let tab, granted else { completion(false); return }
+                    tab.requestSystemMediaAccess(remaining, completion: completion)
+                }
+            }
+        case .denied, .restricted:
+            let alert = NSAlert()
+            alert.messageText = "Media access is blocked by macOS"
+            alert.informativeText = "Enable LeafOrLeave in System Settings → Privacy & Security, then reload this page."
+            alert.addButton(withTitle: "Open System Settings")
+            alert.addButton(withTitle: "Cancel")
+            if alert.runModal() == .alertFirstButtonReturn,
+               let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_\(mediaType == .video ? "Camera" : "Microphone")") {
+                NSWorkspace.shared.open(url)
+            }
+            completion(false)
+        @unknown default:
+            completion(false)
+        }
+    }
 }

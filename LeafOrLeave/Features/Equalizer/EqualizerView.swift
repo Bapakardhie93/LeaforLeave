@@ -45,17 +45,23 @@ struct EqualizerView: View {
     }
 
     private var controls: some View {
-        HStack {
-            Text("Preset").font(.subheadline.weight(.medium))
-            Picker("Preset", selection: $model.preset) {
-                ForEach(EqualizerPreset.all) { Text($0.name).tag($0) }
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Preset").font(.subheadline.weight(.medium))
+                Picker("Preset", selection: $model.preset) {
+                    ForEach(EqualizerPreset.all) { Text($0.name).tag($0) }
+                }
+                .labelsHidden().frame(width: 190)
+                .onChange(of: model.preset) { _, value in model.select(value); apply() }
+                Spacer()
+                Label(model.compatibility.rawValue.capitalized,
+                      systemImage: model.compatibility.rawValue == "available" ? "checkmark.circle.fill" : "info.circle")
+                    .font(.caption).foregroundStyle(.secondary)
             }
-            .labelsHidden().frame(width: 190)
-            .onChange(of: model.preset) { _, value in model.select(value); apply() }
-            Spacer()
-            Label(model.compatibility.rawValue.capitalized,
-                  systemImage: model.compatibility.rawValue == "available" ? "checkmark.circle.fill" : "info.circle")
-                .font(.caption).foregroundStyle(.secondary)
+            Text(model.statusMessage)
+                .font(.caption)
+                .foregroundStyle(model.compatibility == .failed ? .red : .secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 

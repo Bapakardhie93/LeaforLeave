@@ -1,73 +1,139 @@
 <p align="center">
-  <img src="Documentation/Brand/LeafOrLeave-Logo.png" width="360" alt="LeafOrLeave logo">
+  <img
+    src="LeafOrLeave/Assets.xcassets/AppIcon.appiconset/AppIcon-512.png"
+    width="148"
+    alt="LeafOrLeave app icon"
+  >
 </p>
 
-# LeafOrLeave
+<h1 align="center">LeafOrLeave</h1>
 
-LeafOrLeave adalah browser produktivitas native untuk macOS yang dibangun menggunakan SwiftUI, WebKit, dan framework Apple. Proyek ini berfokus pada pengalaman belajar, coding, media, serta perlindungan terhadap kehilangan input saat koneksi jaringan terganggu.
+<p align="center">
+  <strong>Ruang browsing dan produktivitas native yang dirancang khusus untuk macOS.</strong>
+</p>
 
-> **Status: tahap awal / experimental.** LeafOrLeave belum siap digunakan sebagai browser utama atau untuk ujian penting. Beberapa fitur masih membutuhkan validasi keamanan, pengujian website nyata, optimasi memori, dan penyempurnaan UX.
+<p align="center">
+  Workspaces terpisah, tab cerdas, kontrol media, perlindungan sesi,
+  dan password vault dalam satu pengalaman yang tenang dan terorganisasi.
+</p>
 
-## Tujuan produk
+<p align="center">
+  <img alt="Platform macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-1f2937?style=flat-square">
+  <img alt="Swift 5" src="https://img.shields.io/badge/Swift-5-F05138?style=flat-square&logo=swift&logoColor=white">
+  <img alt="SwiftUI" src="https://img.shields.io/badge/UI-SwiftUI-2563EB?style=flat-square">
+  <img alt="WebKit" src="https://img.shields.io/badge/Web-WebKit-7C3AED?style=flat-square">
+  <img alt="Active development" src="https://img.shields.io/badge/status-active%20development-16A34A?style=flat-square">
+</p>
 
-- Menyediakan browser macOS native tanpa Chromium atau Electron.
-- Mengorganisasi aktivitas melalui workspace Study, Coding, Media, dan workspace custom.
-- Mempertahankan tab, media, dan sesi tanpa reload yang tidak diperlukan.
-- Membantu mengurangi kehilangan input ketika jaringan terputus.
-- Memberikan kontrol performa dan privasi yang mudah dipahami.
+---
 
-## Fitur yang sudah tersedia
+## Tentang LeafOrLeave
 
-### Browser dan tab
+LeafOrLeave adalah aplikasi macOS native untuk mengatur aktivitas browsing berdasarkan konteks. Setiap workspace memiliki tab, pilihan tab aktif, pin, warna, ikon, dan halaman awalnya sendiri sehingga aktivitas belajar, pengembangan, media, dan kebutuhan pribadi tidak bercampur.
 
-- Multi-tab dengan satu `WKWebView` per tab.
-- Create, close, duplicate, reopen, move, dan pin tab.
-- Session restore dan persistent website data.
-- Popup dan OAuth window handling.
-- Favicon, loading state, media indicator, dan keyboard shortcuts.
-- Native new-tab page.
+Aplikasi dibangun dengan SwiftUI, WebKit, dan framework sistem macOS. LeafOrLeave tidak menggunakan dependency pihak ketiga pada runtime aplikasinya.
 
-### Exam Protection dan jaringan
+> [!NOTE]
+> LeafOrLeave masih berada dalam tahap pengembangan aktif. Fitur utama telah tersedia dan memiliki pengujian otomatis, tetapi distribusi publik tetap membutuhkan pengujian website nyata, audit performa, signing, dan notarization.
 
-- Pemantauan konektivitas memakai `Network.framework`.
-- Recovery overlay tanpa reload atau submit otomatis.
-- Snapshot lokal terbatas untuk field formulir aman.
-- Password, hidden field, file content, dan payment field tidak direkam.
-- Konfirmasi close/quit untuk protected tab.
+## Sorotan Utama
 
-Exam Protection **tidak** dapat memperpanjang timeout LMS, mengubah keputusan server, menjamin jawaban tersimpan, atau menggantikan mekanisme autosave milik platform ujian.
+| Area | Kemampuan |
+|---|---|
+| **Workspaces** | Lingkungan terpisah dengan tab, pin, ikon, warna, home page, dan urutan tersendiri |
+| **Tabs** | Create, close, duplicate, reopen, reorder, pin, pencarian tab, dan session restore |
+| **Passwords** | macOS Keychain, autentikasi perangkat, autofill, multi-account picker, serta save/update otomatis |
+| **Performance** | Smart Tab Suspension, memory-pressure monitoring, lifecycle metrics, dan manual optimization |
+| **Network** | Status koneksi, latency monitor, local-network routing, serta recovery overlay |
+| **Media** | Deteksi media per tab, play/pause, mute, seek, mini-player, dan equalizer |
+| **Downloads** | Progress, ukuran file, destination picker, safe filename, open, dan reveal in Finder |
+| **Developer** | Console, JavaScript evaluation, Web Inspector, operational logging, dan diagnostics report |
 
-### Workspace dan download
+## Pengalaman Aplikasi
 
-- Workspace Study, Coding, Media, dan custom.
-- Workspace persistence dan tab mapping.
-- Native sidebar.
-- WebKit download history, safe filename handling, open, dan reveal in Finder.
+### Navigasi dan Tab
 
-### Media
+- Toolbar native dengan address field, navigation controls, status jaringan, serta download activity.
+- Tab bar dengan favicon, loading state, audio indicator, close target yang konsisten, dan tab search.
+- Dukungan popup, authentication window, local file, zoom, hard reload, dan keyboard navigation.
+- New Tab page dengan quick links, recent activity, serta identitas workspace aktif.
 
-- Event-driven HTML5 audio/video status.
-- Mini media panel, per-tab mute, mute all, dan Picture in Picture.
-- AirPlay melalui kemampuan WebKit.
-- Equalizer Web Audio eksperimental untuk media yang kompatibel.
+### Workspaces
 
-Equalizer tidak mencoba melewati DRM dan tidak dijamin bekerja pada Spotify atau protected media.
+- Workspace bawaan untuk Study, Coding, dan Media.
+- Workspace custom dengan nama, simbol, accent color, dan home page.
+- Tab benar-benar dipetakan dan dipertahankan per workspace.
+- Selected tab dan pinned tab disimpan secara independen.
+- Workspace editor untuk membuat, mengubah, mengurutkan, dan menghapus workspace.
 
-### Performa dan pengaturan
+### Passwords dan Website Sessions
 
-- Tab lifecycle: active, background, sleeping, frozen, dan discarded.
-- Memory-pressure monitoring dan smart suspension.
-- Playing media, PiP, download/upload, dan protected tab dikecualikan.
-- Typed persistent Settings, privacy controls, theme tokens, diagnostics, dan onboarding.
+- Credential disimpan di macOS Keychain.
+- Password vault dibuka menggunakan Touch ID atau kata sandi Mac.
+- Dukungan reveal, copy, edit, update, dan delete credential.
+- Password yang disalin dibersihkan otomatis dari clipboard setelah 60 detik.
+- Autofill mendukung beberapa akun dan alur login bertahap.
+- Current password, new password, dan verification code ditangani secara terpisah.
+- Tawaran Save/Update ditampilkan setelah terdapat indikasi login berhasil.
+- Website data menggunakan persistent data store agar sesi dapat bertahan setelah aplikasi ditutup.
 
-## Persyaratan pengembangan
+### Performance
 
-- macOS dengan versi yang didukung oleh deployment target proyek.
-- Xcode terbaru yang kompatibel dengan SDK proyek.
-- Swift 5 atau versi yang disediakan Xcode.
-- Tidak membutuhkan dependency pihak ketiga.
+- Lifecycle tab: `active`, `background`, `sleeping`, `frozen`, dan `discarded`.
+- Smart suspension berdasarkan idle timeout, tingkat agresivitas, dan memory pressure.
+- Playing media, mini-player, pinned tab, download, upload, serta protected tab dapat dikecualikan.
+- Performance panel menampilkan status tab dan hasil evaluasi terakhir.
+- Tombol **Optimize Now** tersedia untuk optimasi manual.
 
-## Menjalankan proyek
+### Network dan Exam Protection
+
+- Pemantauan konektivitas menggunakan `Network.framework`.
+- Pengukuran latency dan status jaringan langsung pada toolbar/sidebar.
+- Resolusi alamat perangkat lokal dan fallback koneksi khusus local network.
+- Recovery overlay membantu menjaga konteks ketika koneksi terputus.
+- Protected tab mendapatkan konfirmasi sebelum ditutup atau aplikasi dihentikan.
+- Form snapshot hanya menangani field aman dan tidak merekam password, hidden field, file, atau payment field.
+
+> [!IMPORTANT]
+> Exam Protection tidak dapat memperpanjang timeout server, menjamin jawaban tersimpan, atau menggantikan autosave milik website. Gunakan backup dan ikuti prosedur resmi platform yang digunakan.
+
+### Media dan Downloads
+
+- Status audio/video diperbarui per tab.
+- Kontrol play, pause, mute, seek, dan mini-player.
+- Equalizer eksperimental untuk media HTML5 yang kompatibel.
+- Download toast, toolbar progress, riwayat download, dan destination picker.
+- File dapat dibuka langsung atau ditampilkan di Finder.
+
+### Settings dan Personalisasi
+
+- Settings dengan navigasi terstruktur dan pencarian.
+- Pengaturan General, Tabs, Workspaces, Performance, Network, Exam Protection, Media, Privacy, Appearance, Developer, dan Advanced.
+- Theme preview, accent color, interface density, animation style, dan toolbar customization.
+- Editor quick links untuk New Tab page.
+- Diagnostics metrics dapat dinonaktifkan dan dibersihkan dari memori.
+
+## Privasi dan Keamanan
+
+LeafOrLeave memisahkan credential, website session, dan diagnostics:
+
+- Password hanya disimpan pada macOS Keychain.
+- Pembukaan vault memerlukan autentikasi pemilik perangkat.
+- Password tidak ditulis ke Settings atau diagnostics report.
+- Operational logs tidak menyertakan URL, cookies, form content, credential, atau authentication token.
+- Diagnostic event buffer dibatasi untuk mencegah pertumbuhan memori tanpa batas.
+- App Sandbox, network client, camera, microphone, selected files, dan Downloads entitlements dideklarasikan secara eksplisit.
+
+Jangan membuka issue publik yang mengandung password, token, jawaban ujian, cookie, atau data pribadi.
+
+## Persyaratan Pengembangan
+
+- macOS 14 atau lebih baru.
+- Xcode yang kompatibel dengan SDK proyek.
+- Swift 5 atau versi Swift yang disediakan Xcode.
+- Apple Development Team untuk menjalankan build dengan signing.
+
+## Menjalankan Proyek
 
 1. Clone repository:
 
@@ -76,19 +142,19 @@ Equalizer tidak mencoba melewati DRM dan tidak dijamin bekerja pada Spotify atau
    cd LeaforLeave
    ```
 
-2. Buka `LeafOrLeave.xcodeproj` menggunakan Xcode.
-3. Pilih scheme `LeafOrLeave` dan destination **My Mac**.
-4. Atur Signing Team serta bundle identifier bila diperlukan.
-5. Jalankan dengan `⌘R`.
+2. Buka `LeafOrLeave.xcodeproj`.
+3. Pilih scheme **LeafOrLeave** dan destination **My Mac**.
+4. Pilih Signing Team milik Anda.
+5. Jalankan aplikasi menggunakan `⌘R`.
 
-Build dari terminal:
+Build tanpa code signing:
 
 ```bash
 xcodebuild \
   -project LeafOrLeave.xcodeproj \
   -scheme LeafOrLeave \
   -configuration Debug \
-  -sdk macosx \
+  -destination 'platform=macOS' \
   build CODE_SIGNING_ALLOWED=NO
 ```
 
@@ -103,105 +169,93 @@ xcodebuild test \
   CODE_SIGNING_ALLOWED=NO
 ```
 
-## Struktur proyek
+Menjalankan UI test utama:
+
+```bash
+xcodebuild test \
+  -project LeafOrLeave.xcodeproj \
+  -scheme LeafOrLeave \
+  -destination 'platform=macOS' \
+  -only-testing:LeafOrLeaveUITests/LeafOrLeaveUITests/testModernSettingsNavigation
+```
+
+## Struktur Proyek
 
 ```text
 LeafOrLeave/
 ├── App/                    # App lifecycle dan dependency environment
 ├── Core/
-│   ├── Browser/            # WebKit configuration dan lifecycle
-│   ├── Networking/         # Connectivity monitoring/recovery
-│   └── Persistence/        # Session persistence
-├── DesignSystem/           # Warna, theme, spacing, components
+│   ├── Browser/            # WebView configuration dan lifecycle
+│   ├── Logging/            # Operational log dan bounded diagnostics buffer
+│   ├── Networking/         # Connectivity monitoring dan recovery
+│   ├── Persistence/        # Session persistence
+│   └── Utilities/          # Formatter dan secure clipboard
+├── DesignSystem/
+│   ├── Colors/             # Semantic color dan theme
+│   ├── Components/         # Reusable native components
+│   ├── Layout/             # Window metrics dan spacing
+│   └── Typography/         # Shared typography tokens
 └── Features/
-    ├── Browser/            # Browser shell dan WKWebView container
-    ├── Downloads/          # Download manager
-    ├── Equalizer/          # Experimental Web Audio equalizer
-    ├── ExamProtection/     # Protected tab dan form snapshot
+    ├── Browser/            # Browser shell, menus, console, dan network HUD
+    ├── Downloads/          # Download manager, list, dan toast
+    ├── Equalizer/          # Web Audio equalizer
+    ├── ExamProtection/     # Protected tab dan recovery
+    ├── Library/            # Bookmarks dan history surfaces
     ├── Media/              # Media bridge dan mini panel
-    ├── Performance/        # Suspension dan inspector
-    ├── Settings/           # Typed settings dan onboarding
-    ├── Sidebar/            # Native sidebar
-    ├── Tabs/               # Tab model/manager/UI
+    ├── Omnibox/            # Address and search resolution
+    ├── Passwords/          # Keychain vault, capture, dan autofill
+    ├── Performance/        # Suspension, memory pressure, dan inspector
+    ├── Settings/           # Typed settings dan modern panels
+    ├── Sidebar/            # Workspace dan library navigation
+    ├── Tabs/               # Tab model, manager, bar, dan search
     └── Workspace/          # Workspace model dan persistence
 ```
 
-## Shortcut utama
+## Shortcut Utama
 
 | Shortcut | Aksi |
 |---|---|
-| `⌘T` | Tab baru |
-| `⌘W` | Tutup tab |
-| `⌘⇧T` | Buka kembali tab tertutup |
-| `⌘L` | Fokus address bar |
-| `⌃Tab` / `⌃⇧Tab` | Tab berikutnya/sebelumnya |
-| `⌘1…⌘9` | Pilih tab |
-| `⌘⇧1…⌘⇧3` | Study/Coding/Media workspace |
-| `⌘⇧S` | Tampilkan/sembunyikan sidebar |
+| `⌘T` | Membuat tab baru |
+| `⌘W` | Menutup tab aktif |
+| `⌘⇧T` | Membuka kembali tab terakhir |
+| `⌘L` | Fokus ke address field |
+| `⌃Tab` / `⌃⇧Tab` | Berpindah ke tab berikutnya/sebelumnya |
+| `⌘⇧A` | Mencari tab yang terbuka |
+| `⌘1…⌘9` | Memilih tab berdasarkan posisi |
+| `⌘⇧[` / `⌘⇧]` | Memindahkan tab ke kiri/kanan |
+| `⌘⇧1…⌘⇧3` | Berpindah ke workspace bawaan |
+| `⌘⇧S` | Menampilkan atau menyembunyikan sidebar |
+| `⌘⇧R` | Hard reload |
 
-## Tahapan yang masih perlu dilakukan
+## Roadmap
 
-### P0 — sebelum aplikasi dipakai secara serius
+Prioritas pengembangan berikutnya:
 
-- Menurunkan dan menetapkan deployment target macOS yang realistis untuk distribusi.
-- Audit menyeluruh terhadap lifecycle `WKWebView`, retain cycle, dan penggunaan RAM memakai Instruments.
-- Menguji login Google, Microsoft, GitHub, LMS, ChatGPT, Spotify, dan YouTube pada akun serta situs nyata.
-- Menguji OAuth popup, cookie persistence, download besar, disk penuh, permission denied, dan jaringan putus-sambung.
-- Memperkuat download cancel/resume/retry serta progress dan speed reporting.
-- Menambah persistent history/bookmark yang nyata; sidebar saat ini masih menampilkan entry dasar.
-- Menambah test khusus session corruption, workspace migration, protected tab, suspension, media event bridge, dan download destination.
-- Menguji recovery form pada berbagai LMS tanpa menyimpan informasi sensitif.
-- Menambahkan privacy policy, threat model, dan dokumentasi batasan Exam Protection.
-
-### P1 — quality dan product readiness
-
-- Menyelesaikan UI workspace editor, drag-and-drop tab, duplicate/export workspace, dan warning protected workspace.
-- Menghubungkan seluruh typed Settings ke behavior aplikasi; beberapa setting saat ini baru disimpan sebagai preferensi UI.
-- Menyempurnakan theme system untuk System/Light/Dark dan reduced motion/transparency.
-- Menambahkan history, bookmarks, per-site data viewer, serta clear-data granular.
-- Menambahkan diagnostics preview/export melalui save panel.
-- Menambahkan About, Help, Report Issue, dan acknowledgements yang final.
-- Melakukan pengujian VoiceOver, keyboard-only navigation, contrast, dan Dynamic Type.
-- Menambah localization, dimulai dari Bahasa Indonesia dan English.
-
-### P2 — distribusi
-
-- Menentukan versi aplikasi dan strategi semantic versioning.
-- Menyiapkan Apple Developer signing certificate dan hardened runtime.
-- Menentukan kebutuhan App Sandbox serta entitlement download/network yang tepat.
-- Melakukan archive, code signing, notarization, dan Gatekeeper validation.
-- Menyiapkan DMG atau distribusi Mac App Store beserta screenshot dan metadata.
-- Menambahkan CI untuk build, unit test, static checks, dan release artifact.
-- Menjalankan beta terbatas dan mengumpulkan crash/feedback yang tetap menjaga privasi.
-
-## Keterbatasan penting
-
-- LeafOrLeave tidak dapat melewati DRM, LMS timeout, authentication rules, atau keputusan server.
-- Restored/discarded tab tidak menjamin pemulihan dynamic JavaScript state.
-- PiP, AirPlay, autoplay, dan equalizer bergantung pada WebKit serta kebijakan website.
-- Website dapat menolak custom browser behavior atau mengubah kompatibilitas tanpa pemberitahuan.
-- Jangan gunakan build awal ini untuk ujian atau pekerjaan kritis tanpa backup dan pengujian sendiri.
+- Audit lifecycle dan penggunaan memori menggunakan Instruments.
+- Pengujian sign-in, popup authentication, download besar, disk penuh, dan jaringan putus-sambung pada website nyata.
+- Download resume, retry, speed reporting, dan penanganan storage error.
+- History, bookmarks, serta per-site data management yang lebih lengkap.
+- Accessibility audit untuk VoiceOver, keyboard-only navigation, contrast, dan reduced motion.
+- Localization Bahasa Indonesia dan English.
+- CI untuk build, test, static checks, dan release artifact.
+- Hardened runtime, notarization, packaging, dan distribusi beta.
 
 ## Kontribusi
 
-Issue dan pull request dipersilakan. Untuk perubahan besar, jelaskan masalah, behavior yang diharapkan, langkah reproduksi, versi macOS/Xcode, dan dampak privasi atau keamanan.
+Issue dan pull request dipersilakan. Untuk perubahan besar, sertakan:
 
-Sebelum mengirim pull request:
+1. Masalah dan behavior yang diharapkan.
+2. Langkah reproduksi.
+3. Versi macOS dan Xcode.
+4. Dampak performa, privasi, atau keamanan.
+5. Test untuk behavior baru.
 
-1. Pastikan proyek build.
-2. Jalankan unit test.
-3. Jangan commit token, cookie, credential, DerivedData, atau `xcuserdata`.
-4. Tambahkan test untuk behavior baru.
-5. Dokumentasikan perubahan dan batasannya.
-
-## Keamanan
-
-Jangan membuka issue publik yang berisi credential, authentication token, exam answer, atau data pribadi. Untuk saat ini belum tersedia kanal security disclosure khusus; kanal tersebut harus dibuat sebelum public beta.
+Jangan commit token, cookie, credential, `DerivedData`, atau `xcuserdata`.
 
 ## Lisensi
 
 Lisensi open-source belum ditentukan. Sampai file `LICENSE` ditambahkan, seluruh hak tetap dimiliki oleh pemilik repository dan penggunaan ulang belum otomatis diizinkan.
 
-## Logo
+## Brand
 
-Logo asli disediakan oleh pemilik proyek. App icon merupakan adaptasi tanpa wordmark agar tetap terbaca pada ukuran ikon macOS.
+Nama, identitas visual, dan AppIcon LeafOrLeave merupakan aset asli milik pemilik proyek.
