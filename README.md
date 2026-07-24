@@ -22,6 +22,7 @@
   <img alt="Swift 5" src="https://img.shields.io/badge/Swift-5-F05138?style=flat-square&logo=swift&logoColor=white">
   <img alt="SwiftUI" src="https://img.shields.io/badge/UI-SwiftUI-2563EB?style=flat-square">
   <img alt="WebKit" src="https://img.shields.io/badge/Web-WebKit-7C3AED?style=flat-square">
+  <img alt="MIT License" src="https://img.shields.io/badge/license-MIT-16A34A?style=flat-square">
   <img alt="Active development" src="https://img.shields.io/badge/status-active%20development-16A34A?style=flat-square">
 </p>
 
@@ -41,6 +42,7 @@ Aplikasi dibangun dengan SwiftUI, WebKit, dan framework sistem macOS. LeafOrLeav
 | Area | Kemampuan |
 |---|---|
 | **Workspaces** | Lingkungan terpisah dengan tab, pin, ikon, warna, home page, dan urutan tersendiri |
+| **Touch Bar** | Perpindahan workspace berbasis ikon dan pemilihan tab dengan animasi native pada Mac yang mendukung |
 | **Tabs** | Create, close, duplicate, reopen, reorder, pin, pencarian tab, dan session restore |
 | **Passwords** | macOS Keychain, autentikasi perangkat, autofill, multi-account picker, serta save/update otomatis |
 | **Performance** | Smart Tab Suspension, memory-pressure monitoring, lifecycle metrics, dan manual optimization |
@@ -254,7 +256,7 @@ Jangan commit token, cookie, credential, `DerivedData`, atau `xcuserdata`.
 
 ## Lisensi
 
-Lisensi open-source belum ditentukan. Sampai file `LICENSE` ditambahkan, seluruh hak tetap dimiliki oleh pemilik repository dan penggunaan ulang belum otomatis diizinkan.
+LeafOrLeave tersedia di bawah [MIT License](LICENSE). Anda dapat menggunakan, memodifikasi, dan mendistribusikan software ini dengan tetap menyertakan copyright dan teks lisensinya.
 
 ## Brand
 

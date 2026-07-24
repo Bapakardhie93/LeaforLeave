@@ -41,6 +41,7 @@ final class AppEnvironment {
         suspensionManager.apply(preferences.value)
         workspaceManager.assignUnownedTabs(tabs.tabs.map(\.id))
         AppDelegate.tabManager = tabs
+        AppDelegate.configureTouchBar(workspaces: workspaceManager, tabs: tabs)
         LeafLog.info("Application services initialized", category: .app)
     }
 }

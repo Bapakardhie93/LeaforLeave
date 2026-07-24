@@ -410,7 +410,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Configuration/LeafOrLeave-Info.plist";
 				INFOPLIST_KEY_NSCameraUsageDescription = "LeafOrLeave needs camera access when a website requests video capture.";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Satriya Dwi Mahardhika.";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "LeafOrLeave needs local network access to open router and device administration pages.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "LeafOrLeave needs microphone access when a website requests audio capture.";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -451,7 +451,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Configuration/LeafOrLeave-Info.plist";
 				INFOPLIST_KEY_NSCameraUsageDescription = "LeafOrLeave needs camera access when a website requests video capture.";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Satriya Dwi Mahardhika.";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "LeafOrLeave needs local network access to open router and device administration pages.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "LeafOrLeave needs microphone access when a website requests audio capture.";
 				LD_RUNPATH_SEARCH_PATHS = (
