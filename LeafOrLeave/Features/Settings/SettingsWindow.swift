@@ -21,10 +21,11 @@ struct SettingsWindow: View {
         HStack(spacing: 0) {
             settingsSidebar
                 .frame(width: 238)
-            Rectangle().fill(.white.opacity(0.07)).frame(width: 1)
+            Rectangle().fill(Color.primary.opacity(0.08)).frame(width: 1)
             settingsDetail
         }
         .background(Color(nsColor: .windowBackgroundColor))
+        .leafAppearance(settings.value.appearance)
         .frame(minWidth: 960, idealWidth: 1120, minHeight: 680, idealHeight: 800)
         .alert("Clear all website data?", isPresented: $confirmWebsiteData) {
             Button("Cancel", role: .cancel) {}
@@ -78,8 +79,8 @@ struct SettingsWindow: View {
             }
             .padding(.horizontal, 11)
             .frame(height: 36)
-            .background(.white.opacity(0.075), in: RoundedRectangle(cornerRadius: 10))
-            .overlay { RoundedRectangle(cornerRadius: 10).strokeBorder(.white.opacity(0.06)) }
+            .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 10))
+            .overlay { RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.08)).allowsHitTesting(false) }
             .padding(.horizontal, 12)
 
             ScrollView {
@@ -92,7 +93,7 @@ struct SettingsWindow: View {
                 .padding(.bottom, 16)
             }
         }
-        .background(.black.opacity(0.13))
+        .background(Color.primary.opacity(0.03))
     }
 
     private var settingsDetail: some View {
@@ -217,6 +218,8 @@ struct SettingsWindow: View {
                     isOn: $settings.value.askDownloadDestination
                 )
             }
+
+            KeyboardShortcutsSettingsCard(settings: settings)
         }
     }
 
@@ -401,6 +404,21 @@ struct SettingsWindow: View {
 
     private var privacyPanel: some View {
         VStack(alignment: .leading, spacing: 18) {
+            SettingsCard("Private browsing",
+                         subtitle: "Private tabs use an ephemeral WebKit data store and are excluded from History and session restore.") {
+                SettingsValueRow(icon: "eye.slash.fill", title: "Private tabs",
+                                 detail: "Cookies, cache, and local site data disappear when the private tab is closed.") {
+                    HStack(spacing: 10) {
+                        let privateCount = tabs.tabs.filter(\.isPrivate).count
+                        if privateCount > 0 {
+                            Text("\(privateCount) open")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(LeafColors.accent)
+                        }
+                        Button("New Private Tab") { tabs.createPrivateTab() }
+                    }
+                }
+            }
             SettingsCard("Website data",
                          subtitle: "Cookies keep website logins active across restarts. Clear them only when you want to sign out everywhere.") {
                 SettingsValueRow(icon: "externaldrive", title: "Persistent sessions",
@@ -450,7 +468,7 @@ struct SettingsWindow: View {
             .frame(height: 39)
             .foregroundStyle(selected ? Color.white : Color.primary.opacity(0.88))
             .background(
-                selected ? LeafColors.accent.opacity(0.82) : Color.white.opacity(0.001),
+                selected ? LeafColors.accent.opacity(0.82) : Color.primary.opacity(0.001),
                 in: RoundedRectangle(cornerRadius: 10, style: .continuous)
             )
         }

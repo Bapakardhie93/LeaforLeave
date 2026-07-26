@@ -6,6 +6,37 @@ struct LibraryEntry: Identifiable, Codable, Equatable {
     var title: String
     let url: URL
     var date: Date
+    var visitCount: Int
+
+    init(id: UUID, title: String, url: URL, date: Date, visitCount: Int = 1) {
+        self.id = id
+        self.title = title
+        self.url = url
+        self.date = date
+        self.visitCount = max(visitCount, 1)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, title, url, date, visitCount
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(UUID.self, forKey: .id)
+        title = try values.decode(String.self, forKey: .title)
+        url = try values.decode(URL.self, forKey: .url)
+        date = try values.decode(Date.self, forKey: .date)
+        visitCount = max(try values.decodeIfPresent(Int.self, forKey: .visitCount) ?? 1, 1)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(id, forKey: .id)
+        try values.encode(title, forKey: .title)
+        try values.encode(url, forKey: .url)
+        try values.encode(date, forKey: .date)
+        try values.encode(visitCount, forKey: .visitCount)
+    }
 }
 
 @MainActor
@@ -38,18 +69,40 @@ final class LibraryManager {
         save(bookmarks, key: bookmarksKey)
     }
 
-    func recordVisit(title: String, url: URL?) {
+    func recordVisit(title: String, url: URL?, at now: Date = .now) {
         guard let url, isWebURL(url) else { return }
-        let now = Date()
-        if let first = history.first, first.url == url, now.timeIntervalSince(first.date) < 30 {
-            history[0].title = cleanTitle(title, url: url)
-            history[0].date = now
+        if let index = history.firstIndex(where: { $0.url == url }) {
+            let previous = history[index]
+            let isImmediateRepeat = index == 0 && now.timeIntervalSince(previous.date) < 30
+            let updated = LibraryEntry(
+                id: previous.id,
+                title: cleanTitle(title, url: url),
+                url: url,
+                date: now,
+                visitCount: isImmediateRepeat ? previous.visitCount : previous.visitCount + 1
+            )
+            history.remove(at: index)
+            history.insert(updated, at: 0)
         } else {
-            history.removeAll { $0.url == url }
             history.insert(LibraryEntry(id: UUID(), title: cleanTitle(title, url: url), url: url, date: now), at: 0)
         }
         if history.count > 500 { history.removeLast(history.count - 500) }
         save(history, key: historyKey)
+    }
+
+    func autocompleteSuggestion(for input: String) -> String? {
+        let query = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty, !query.contains(where: { $0.isWhitespace }) else { return nil }
+
+        return history.enumerated().compactMap { index, entry -> (text: String, score: Int)? in
+            guard let completion = Self.completionText(for: entry.url, matching: query) else { return nil }
+            let recency = max(history.count - index, 0)
+            return (completion, entry.visitCount * 10_000 + recency)
+        }
+        .max { lhs, rhs in
+            lhs.score == rhs.score ? lhs.text.count > rhs.text.count : lhs.score < rhs.score
+        }?
+        .text
     }
 
     func removeBookmark(_ id: UUID) { bookmarks.removeAll { $0.id == id }; save(bookmarks, key: bookmarksKey) }
@@ -59,6 +112,31 @@ final class LibraryManager {
     private func isWebURL(_ url: URL) -> Bool { url.scheme == "http" || url.scheme == "https" }
     private func cleanTitle(_ title: String, url: URL) -> String {
         ["", "Loading…", "New Tab"].contains(title) ? (url.host ?? url.absoluteString) : title
+    }
+
+    private static func completionText(for url: URL, matching query: String) -> String? {
+        let absolute = url.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        var hostAndPath = url.host ?? absolute
+        if hostAndPath.lowercased().hasPrefix("www.") {
+            hostAndPath.removeFirst(4)
+        }
+        if let port = url.port { hostAndPath += ":\(port)" }
+        if !url.path.isEmpty, url.path != "/" { hostAndPath += url.path }
+        if let query = url.query, !query.isEmpty { hostAndPath += "?\(query)" }
+        if let fragment = url.fragment, !fragment.isEmpty { hostAndPath += "#\(fragment)" }
+
+        let candidates = query.localizedCaseInsensitiveContains("://")
+            ? [absolute]
+            : [hostAndPath, url.host.map { host in
+                var value = host
+                if let port = url.port { value += ":\(port)" }
+                if !url.path.isEmpty, url.path != "/" { value += url.path }
+                return value
+            }, absolute].compactMap { $0 }
+
+        return candidates.first { candidate in
+            candidate.count > query.count && candidate.lowercased().hasPrefix(query.lowercased())
+        }
     }
     private func save(_ entries: [LibraryEntry], key: String) {
         if let data = try? JSONEncoder().encode(entries) { defaults.set(data, forKey: key) }

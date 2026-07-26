@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct NewTabPageView: View {
+    @Environment(\.leafAccentColor) private var accentColor
     @State private var query = ""
     @State private var appeared = false
     @FocusState private var searchIsFocused: Bool
@@ -10,6 +11,9 @@ struct NewTabPageView: View {
     let showQuickLinks: Bool
     let showRecentActivity: Bool
     let quickLinks: [QuickLink]
+    let backgroundStyle: NewTabBackgroundStyle
+    let backgroundColor: Color
+    var isPrivate = false
     let submit: (String) -> Void
 
     var body: some View {
@@ -29,7 +33,7 @@ struct NewTabPageView: View {
                                 quickLinksGrid
                             }
 
-                            if showRecentActivity && !recentEntries.isEmpty {
+            if showRecentActivity && !isPrivate && !recentEntries.isEmpty {
                                 recentActivity
                             }
 
@@ -58,22 +62,24 @@ struct NewTabPageView: View {
 
     private var background: some View {
         ZStack {
-            LeafColors.background
-            LinearGradient(
-                colors: [
-                    LeafColors.accent.opacity(0.105),
-                    Color.clear,
-                    LeafColors.secure.opacity(0.045)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            RadialGradient(
-                colors: [Color.primary.opacity(0.028), .clear],
-                center: .top,
-                startRadius: 20,
-                endRadius: 520
-            )
+            backgroundColor
+            if backgroundStyle != .solid {
+                LinearGradient(
+                    colors: backgroundStyle == .ambient
+                        ? [accentColor.opacity(0.105), Color.clear, LeafColors.secure.opacity(0.045)]
+                        : [accentColor.opacity(0.16), accentColor.opacity(0.025)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            }
+            if backgroundStyle == .ambient {
+                RadialGradient(
+                    colors: [Color.primary.opacity(0.028), .clear],
+                    center: .top,
+                    startRadius: 20,
+                    endRadius: 520
+                )
+            }
         }
         .ignoresSafeArea()
     }
@@ -93,25 +99,25 @@ struct NewTabPageView: View {
     private var captainMark: some View {
         ZStack {
             Circle()
-                .fill(LeafColors.accent.opacity(0.13))
+                .fill(accentColor.opacity(0.13))
             Circle()
-                .strokeBorder(LeafColors.accent.opacity(0.2))
+                .strokeBorder(accentColor.opacity(0.2))
 
             Image(systemName: "sailboat.fill")
                 .font(.system(size: 27, weight: .medium))
-                .foregroundStyle(LeafColors.accent)
+                .foregroundStyle(accentColor)
                 .offset(y: 1)
 
-            Image(systemName: "skull.fill")
+            Image(systemName: "flag.checkered")
                 .font(.system(size: 8, weight: .bold))
                 .foregroundStyle(.white)
                 .frame(width: 17, height: 17)
-                .background(LeafColors.accent, in: Circle())
-                .overlay { Circle().strokeBorder(LeafColors.background.opacity(0.5)) }
+                .background(accentColor, in: Circle())
+                .overlay { Circle().strokeBorder(backgroundColor.opacity(0.5)).allowsHitTesting(false) }
                 .offset(x: 19, y: -18)
         }
         .frame(width: 52, height: 52)
-        .shadow(color: LeafColors.accent.opacity(0.15), radius: 10, y: 4)
+        .shadow(color: accentColor.opacity(0.15), radius: 10, y: 4)
         .accessibilityHidden(true)
     }
 
@@ -146,12 +152,13 @@ struct NewTabPageView: View {
         .overlay {
             RoundedRectangle(cornerRadius: 13, style: .continuous)
                 .strokeBorder(
-                    searchIsFocused ? LeafColors.accent.opacity(0.72) : LeafColors.border,
+                    searchIsFocused ? accentColor.opacity(0.72) : LeafColors.border,
                     lineWidth: searchIsFocused ? 1.5 : 1
                 )
+                .allowsHitTesting(false)
         }
         .shadow(
-            color: searchIsFocused ? LeafColors.accent.opacity(0.13) : .black.opacity(0.12),
+            color: searchIsFocused ? accentColor.opacity(0.13) : .black.opacity(0.12),
             radius: searchIsFocused ? 12 : 10,
             y: 4
         )
@@ -205,14 +212,16 @@ struct NewTabPageView: View {
                        symbol: isConnected ? "wifi" : "wifi.slash",
                        color: isConnected ? LeafColors.secure : .red)
             statusDivider
-            statusItem("Private by WebKit", symbol: "hand.raised")
+            statusItem(isPrivate ? "History off" : "Private by WebKit",
+                       symbol: isPrivate ? "eye.slash.fill" : "hand.raised",
+                       color: isPrivate ? accentColor : nil)
         }
         .font(.system(size: 11))
         .foregroundStyle(.secondary)
         .padding(.horizontal, 13)
         .frame(height: 30)
         .background(Color.primary.opacity(0.035), in: Capsule())
-        .overlay { Capsule().strokeBorder(Color.primary.opacity(0.055)) }
+        .overlay { Capsule().strokeBorder(Color.primary.opacity(0.055)).allowsHitTesting(false) }
         .fixedSize()
         .accessibilityElement(children: .combine)
     }
@@ -267,6 +276,7 @@ private struct QuickLinkButton: View {
             .overlay {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .strokeBorder(Color.primary.opacity(isHovered ? 0.11 : 0.065))
+                    .allowsHitTesting(false)
             }
             .scaleEffect(isHovered ? 1.018 : 1)
         }
@@ -280,6 +290,7 @@ private struct QuickLinkButton: View {
 }
 
 private struct RecentActivityButton: View {
+    @Environment(\.leafAccentColor) private var accentColor
     let entry: LibraryEntry
     let isBookmarked: Bool
     let action: () -> Void
@@ -291,7 +302,7 @@ private struct RecentActivityButton: View {
                 HStack {
                     Image(systemName: isBookmarked ? "star.fill" : "clock")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(LeafColors.accent)
+                        .foregroundStyle(accentColor)
                     Spacer()
                     Image(systemName: "arrow.up.right")
                         .font(.system(size: 9, weight: .semibold))
@@ -319,6 +330,7 @@ private struct RecentActivityButton: View {
             .overlay {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .strokeBorder(Color.primary.opacity(isHovered ? 0.10 : 0.05))
+                    .allowsHitTesting(false)
             }
         }
         .buttonStyle(.plain)

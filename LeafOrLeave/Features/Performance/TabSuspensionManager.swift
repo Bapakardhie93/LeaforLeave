@@ -81,7 +81,7 @@ final class TabSuspensionManager {
 
     private func eligibleTabs(in tabs: TabManager, respectsIdleTimeout: Bool) -> [BrowserTab] {
         tabs.tabs.filter { tab in
-            tab.id != tabs.selectedTabID &&
+            !tabs.visibleTabIDs.contains(tab.id) &&
             tab.lifecycleState == .background &&
             !tab.isDownloading &&
             !tab.isUploading &&

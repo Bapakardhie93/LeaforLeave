@@ -31,7 +31,12 @@ final class AppEnvironment {
         examProtection = ExamProtectionManager()
         suspensionManager = TabSuspensionManager(tabs: tabs)
         workspaceManager = WorkspaceManager()
+        tabs.workspaceManager = workspaceManager
+        for window in tabs.windows where window.workspaceID == nil {
+            window.workspaceID = workspaceManager.selectedWorkspaceID
+        }
         tabs.settings = preferences
+        tabs.applyDeveloperSettings()
         tabs.passwordVault = vault
         let downloads = DownloadManager(asksForDestination: { [weak settings] in
             settings?.value.askDownloadDestination ?? false

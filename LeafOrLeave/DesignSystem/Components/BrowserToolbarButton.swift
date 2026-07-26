@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct BrowserToolbarButton: View {
+    @Environment(\.leafToolbarIconSize) private var toolbarIconSize
     let systemName: String
     let helpText: String
     var isEnabled = true
@@ -10,14 +11,19 @@ struct BrowserToolbarButton: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 13, weight: .medium))
-                .frame(width: BrowserChromeMetrics.controlSize, height: BrowserChromeMetrics.controlSize)
-                .contentShape(Rectangle())
+            ZStack {
+                Color.clear
+                Image(systemName: systemName)
+                    .font(.system(size: toolbarIconSize, weight: .medium))
+            }
+            .frame(width: BrowserChromeMetrics.controlSize, height: BrowserChromeMetrics.controlSize)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .frame(width: BrowserChromeMetrics.controlSize, height: BrowserChromeMetrics.controlSize)
+        .contentShape(Rectangle())
         .foregroundStyle(isEnabled ? Color.primary : Color.secondary.opacity(0.45))
-        .background(backgroundColor, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(backgroundColor, in: RoundedRectangle(cornerRadius: BrowserChromeMetrics.toolbarControlCornerRadius, style: .continuous))
         .disabled(!isEnabled)
         .onHover { isHovered = $0 }
         .cursorHelp(helpText)

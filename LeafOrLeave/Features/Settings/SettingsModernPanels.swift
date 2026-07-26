@@ -113,6 +113,7 @@ struct WorkspaceSettingsPanel: View {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .strokeBorder(selected ? color.opacity(0.8) : Color.primary.opacity(0.07),
                                   lineWidth: selected ? 1.5 : 1)
+                    .allowsHitTesting(false)
             }
         }
         .buttonStyle(.plain)
@@ -151,30 +152,10 @@ struct WorkspaceSettingsPanel: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Icon")
                         .font(.system(size: 12, weight: .semibold))
-                    LazyVGrid(columns: Array(repeating: GridItem(.fixed(38), spacing: 8), count: 10),
-                              alignment: .leading, spacing: 8) {
-                        ForEach(SettingsPalette.workspaceSymbols, id: \.self) { symbol in
-                            Button {
-                                workspaces.setSymbol(id: workspace.id, symbol: symbol)
-                            } label: {
-                                Image(systemName: symbol)
-                                    .frame(width: 34, height: 34)
-                                    .background(
-                                        workspace.symbolName == symbol
-                                            ? SettingsPalette.color(workspace.accentName ?? workspace.accentToken).opacity(0.18)
-                                            : Color.primary.opacity(0.04),
-                                        in: RoundedRectangle(cornerRadius: 9)
-                                    )
-                                    .overlay {
-                                        RoundedRectangle(cornerRadius: 9)
-                                            .strokeBorder(workspace.symbolName == symbol
-                                                ? SettingsPalette.color(workspace.accentName ?? workspace.accentToken)
-                                                : Color.primary.opacity(0.06))
-                                    }
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
+                    SettingsIconPicker(selection: Binding(
+                        get: { workspace.symbolName },
+                        set: { workspaces.setSymbol(id: workspace.id, symbol: $0) }
+                    ))
                 }
                 .padding(14)
                 SettingsDivider()
@@ -198,6 +179,7 @@ struct WorkspaceSettingsPanel: View {
                                 .padding(3)
                                 .overlay {
                                     Circle().strokeBorder(selected ? Color.primary : .clear, lineWidth: 2)
+                                        .allowsHitTesting(false)
                                 }
                         }
                         .buttonStyle(.plain)
@@ -250,26 +232,14 @@ private struct WorkspaceCreator: View {
             TextField("Workspace name", text: $name)
                 .textFieldStyle(.roundedBorder)
             Text("Choose an icon").font(.headline)
-            LazyVGrid(columns: Array(repeating: GridItem(.fixed(40), spacing: 8), count: 6)) {
-                ForEach(SettingsPalette.workspaceSymbols, id: \.self) { item in
-                    Button {
-                        symbol = item
-                    } label: {
-                        Image(systemName: item)
-                            .frame(width: 36, height: 36)
-                            .background(symbol == item ? SettingsPalette.color(accent).opacity(0.2) : .clear,
-                                        in: RoundedRectangle(cornerRadius: 9))
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
+            SettingsIconPicker(selection: $symbol)
             Text("Choose a color").font(.headline)
             HStack(spacing: 14) {
                 ForEach(SettingsPalette.workspaceTokens, id: \.self) { token in
                     Button { accent = token } label: {
                         Circle().fill(SettingsPalette.color(token)).frame(width: 24, height: 24)
                             .padding(3)
-                            .overlay { Circle().strokeBorder(accent == token ? Color.primary : .clear, lineWidth: 2) }
+                            .overlay { Circle().strokeBorder(accent == token ? Color.primary : .clear, lineWidth: 2).allowsHitTesting(false) }
                     }.buttonStyle(.plain)
                 }
             }
@@ -474,17 +444,52 @@ struct AppearanceSettingsPanel: View {
                         ForEach(UIAccent.allCases, id: \.self) { accent in
                             Button {
                                 settings.value.accent = accent
+                                settings.value.useCustomAccent = false
+                                settings.value.useWorkspaceAccent = false
                             } label: {
                                 Circle().fill(SettingsPalette.color(accent)).frame(width: 21, height: 21)
                                     .padding(3)
                                     .overlay {
-                                        Circle().strokeBorder(settings.value.accent == accent ? Color.primary : .clear,
+                                        Circle().strokeBorder(
+                                            settings.value.accent == accent && !settings.value.useCustomAccent
+                                                ? Color.primary : .clear,
                                                               lineWidth: 2)
+                                            .allowsHitTesting(false)
                                     }
                             }
                             .buttonStyle(.plain)
                             .help(accent.rawValue.capitalized)
                         }
+                    }
+                    Divider()
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Custom accent").font(.system(size: 13, weight: .medium))
+                            Text("Override workspace colors with any color you choose.")
+                                .font(.system(size: 11)).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Toggle("", isOn: $settings.value.useCustomAccent)
+                            .labelsHidden()
+                        ColorPicker(
+                            "Custom accent",
+                            selection: customAccentBinding,
+                            supportsOpacity: false
+                        )
+                        .labelsHidden()
+                        .disabled(!settings.value.useCustomAccent)
+                    }
+                    Divider()
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Workspace accent").font(.system(size: 13, weight: .medium))
+                            Text("Let each workspace use its own saved color.")
+                                .font(.system(size: 11)).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Toggle("", isOn: $settings.value.useWorkspaceAccent)
+                            .labelsHidden()
+                            .disabled(settings.value.useCustomAccent)
                     }
                 }
                 .padding(14)
@@ -495,6 +500,45 @@ struct AppearanceSettingsPanel: View {
                                  detail: "Controls spacing across tabs, toolbars, and settings.") {
                     Picker("", selection: $settings.value.density) {
                         ForEach(InterfaceDensity.allCases, id: \.self) {
+                            Text($0.rawValue.capitalized).tag($0)
+                        }
+                    }
+                    .labelsHidden().pickerStyle(.segmented).frame(width: 285)
+                }
+                SettingsDivider()
+                SettingsValueRow(icon: "rectangle.tophalf.inset.filled", title: "Tab position",
+                                 detail: "Place tabs across the top or in a dedicated left panel.") {
+                    Picker("", selection: $settings.value.tabPlacement) {
+                        Text("Top").tag(TabPlacement.top)
+                        Text("Left").tag(TabPlacement.left)
+                    }
+                    .labelsHidden().pickerStyle(.segmented).frame(width: 210)
+                }
+                SettingsDivider()
+                SettingsValueRow(icon: "slider.horizontal.3", title: "Toolbar style",
+                                 detail: "Choose a unified, minimal, or floating browser toolbar.") {
+                    Picker("", selection: $settings.value.toolbarStyle) {
+                        ForEach(BrowserToolbarStyle.allCases, id: \.self) {
+                            Text($0.rawValue.capitalized).tag($0)
+                        }
+                    }
+                    .labelsHidden().pickerStyle(.segmented).frame(width: 285)
+                }
+                SettingsDivider()
+                SettingsValueRow(icon: "textformat.size", title: "Toolbar icon size",
+                                 detail: "Change icon size without shrinking the clickable area.") {
+                    Picker("", selection: $settings.value.toolbarIconScale) {
+                        ForEach(ToolbarIconScale.allCases, id: \.self) {
+                            Text($0.rawValue.capitalized).tag($0)
+                        }
+                    }
+                    .labelsHidden().pickerStyle(.segmented).frame(width: 285)
+                }
+                SettingsDivider()
+                SettingsValueRow(icon: "paintbrush", title: "New Tab background",
+                                 detail: "Control how strongly your accent color fills a new tab.") {
+                    Picker("", selection: $settings.value.newTabBackgroundStyle) {
+                        ForEach(NewTabBackgroundStyle.allCases, id: \.self) {
                             Text($0.rawValue.capitalized).tag($0)
                         }
                     }
@@ -580,7 +624,7 @@ struct AppearanceSettingsPanel: View {
                             .fill(dark ? .black.opacity(0.35) : .gray.opacity(0.18))
                             .frame(width: 18)
                         VStack(spacing: 5) {
-                            RoundedRectangle(cornerRadius: 3).fill(SettingsPalette.color(settings.value.accent)).frame(height: 8)
+                            RoundedRectangle(cornerRadius: 3).fill(activeAccentColor).frame(height: 8)
                             RoundedRectangle(cornerRadius: 3)
                                 .fill(dark ? .white.opacity(0.12) : .black.opacity(0.08))
                         }
@@ -593,15 +637,29 @@ struct AppearanceSettingsPanel: View {
             }
             .padding(8)
             .frame(maxWidth: .infinity)
-            .background(selected ? LeafColors.accent.opacity(0.12) : Color.primary.opacity(0.03),
+            .background(selected ? activeAccentColor.opacity(0.12) : Color.primary.opacity(0.03),
                         in: RoundedRectangle(cornerRadius: 11))
             .overlay {
                 RoundedRectangle(cornerRadius: 11)
-                    .strokeBorder(selected ? LeafColors.accent : Color.primary.opacity(0.06),
+                    .strokeBorder(selected ? activeAccentColor : Color.primary.opacity(0.06),
                                   lineWidth: selected ? 1.5 : 1)
+                    .allowsHitTesting(false)
             }
         }
         .buttonStyle(.plain)
+    }
+
+    private var customAccentBinding: Binding<Color> {
+        Binding(
+            get: { settings.value.customAccent.color },
+            set: { settings.value.customAccent = UserAccentColor(color: $0) }
+        )
+    }
+
+    private var activeAccentColor: Color {
+        settings.value.useCustomAccent
+            ? settings.value.customAccent.color
+            : SettingsPalette.color(settings.value.accent)
     }
 
     private func themeTitle(_ appearance: LeafAppearance) -> String {
@@ -630,13 +688,8 @@ struct AppearanceSettingsPanel: View {
 
     private func shortcutEditor(_ link: QuickLink) -> some View {
         HStack(spacing: 12) {
-            Picker("", selection: quickLinkBinding(link.id, \.symbol)) {
-                ForEach(SettingsPalette.workspaceSymbols + ["sparkles"], id: \.self) {
-                    Image(systemName: $0).tag($0)
-                }
-            }
-            .labelsHidden()
-            .frame(width: 54)
+            SettingsIconPicker(selection: quickLinkBinding(link.id, \.symbol),
+                               symbols: SettingsPalette.shortcutSymbols)
             VStack(spacing: 7) {
                 TextField("Shortcut name", text: quickLinkBinding(link.id, \.title))
                     .textFieldStyle(.roundedBorder)

@@ -41,6 +41,12 @@ struct WebViewFactory {
         makeWebView(configuration: configuration.makeWebViewConfiguration())
     }
 
+    func makePrivateWebView() -> WKWebView {
+        let privateConfiguration = configuration.makeWebViewConfiguration()
+        privateConfiguration.websiteDataStore = .nonPersistent()
+        return makeWebView(configuration: privateConfiguration)
+    }
+
     func makeWebView(configuration: WKWebViewConfiguration) -> WKWebView {
         if configuration.applicationNameForUserAgent?.isEmpty != false {
             // The stock macOS WKWebView user agent has no Version/Safari

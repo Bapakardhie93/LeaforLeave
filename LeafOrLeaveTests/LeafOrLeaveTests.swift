@@ -6,7 +6,9 @@
 //
 
 import Foundation
+import SwiftUI
 import Testing
+import UniformTypeIdentifiers
 import WebKit
 @testable import LeafOrLeave
 
@@ -40,6 +42,23 @@ struct LeafOrLeaveTests {
         #expect(components?.queryItems?.first?.value == "Swift WKWebView")
     }
 
+    @Test func navigationErrorsAreClassifiedForRecoveryUI() {
+        let offline = BrowserNavigationError.navigationFailure(
+            from: NSError(domain: NSURLErrorDomain, code: NSURLErrorNotConnectedToInternet),
+            failingURL: URL(string: "https://example.com")
+        )
+        #expect(offline.failureKind == .offline)
+        #expect(offline.address == "https://example.com")
+        #expect(offline.systemImage == "wifi.slash")
+
+        let dns = BrowserNavigationError.navigationFailure(
+            from: NSError(domain: NSURLErrorDomain, code: NSURLErrorCannotFindHost),
+            failingURL: URL(string: "https://missing.example")
+        )
+        #expect(dns.failureKind == .dns)
+        #expect(dns.title == "Website not found")
+    }
+
     @Test func resolvesConfiguredSearchEngines() {
         #expect(resolver.resolve("privacy browser", engine: .duckDuckGo)?.host == "duckduckgo.com")
         #expect(resolver.resolve("swift webkit", engine: .bing)?.host == "www.bing.com")
@@ -57,6 +76,39 @@ struct LeafOrLeaveTests {
         #expect(userAgent.contains("AppleWebKit/"))
         #expect(userAgent.contains(" Version/"))
         #expect(userAgent.contains(" Safari/"))
+    }
+
+    @Test func embeddingWebViewDoesNotInstallClickBlockingRecognizer() {
+        let webView = WebViewFactory(configuration: .default).makeWebView()
+        let existingRecognizers = Set(webView.gestureRecognizers.map(ObjectIdentifier.init))
+        let host = NSHostingView(rootView: WebViewContainer(webView: webView))
+        host.frame = CGRect(x: 0, y: 0, width: 800, height: 600)
+        host.layoutSubtreeIfNeeded()
+
+        let newlyInstalledRecognizers = webView.gestureRecognizers.filter {
+            !existingRecognizers.contains(ObjectIdentifier($0))
+        }
+        #expect(newlyInstalledRecognizers.allSatisfy { !($0 is NSClickGestureRecognizer) })
+    }
+
+    @Test func toolbarButtonHitTargetIncludesItsCorners() {
+        let host = NSHostingView(rootView: BrowserToolbarButton(
+            systemName: "star",
+            helpText: "Test"
+        ) {})
+        host.frame = CGRect(
+            x: 0,
+            y: 0,
+            width: BrowserChromeMetrics.controlSize,
+            height: BrowserChromeMetrics.controlSize
+        )
+        host.layoutSubtreeIfNeeded()
+
+        #expect(host.hitTest(NSPoint(x: 2, y: 2)) != nil)
+        #expect(host.hitTest(NSPoint(
+            x: BrowserChromeMetrics.controlSize - 2,
+            y: BrowserChromeMetrics.controlSize - 2
+        )) != nil)
     }
 
     @Test func workspaceDefaultsAndMutation() {
@@ -109,6 +161,11 @@ struct LeafOrLeaveTests {
         #expect(settings.value.keepPinnedTabsAlive)
         #expect(settings.value.autoFillPasswords)
         #expect(settings.value.offerToSavePasswords)
+        #expect(settings.value.tabPlacement == .top)
+        #expect(settings.value.toolbarStyle == .unified)
+        #expect(settings.value.toolbarIconScale == .regular)
+        #expect(settings.value.newTabBackgroundStyle == .ambient)
+        #expect(settings.value.useWorkspaceAccent)
         settings.value.customSearchTemplate = "https://search.example/?q={query}"
         #expect(settings.validCustomSearchTemplate())
         settings.value.customSearchTemplate = "https://search.example/"
@@ -126,11 +183,176 @@ struct LeafOrLeaveTests {
         #expect(settings.value.keepExamTabsAlive)
         #expect(settings.value.passwordAutoLockMinutes == 5)
         #expect(settings.value.autoFillPasswords)
+        #expect(settings.value.tabPlacement == .top)
+        #expect(settings.value.toolbarStyle == .unified)
+        #expect(!settings.value.useCustomAccent)
+        #expect(settings.shortcut(for: .newTab).display == "⌘T")
+    }
+
+    @Test func customKeyboardShortcutsPersistAndDetectConflicts() {
+        let suite = UserDefaults(suiteName: UUID().uuidString)!
+        var settings: SettingsStore? = SettingsStore(defaults: suite)
+        let custom = BrowserShortcut(key: "k", modifiers: [.command, .option])
+        settings?.setShortcut(custom, for: .newTab)
+        settings?.setShortcut(custom, for: .reload)
+        #expect(settings?.shortcut(for: .reload) == custom)
+        #expect(settings?.shortcut(for: .newTab) == BrowserShortcutDefaults.values[.reload])
+        settings = nil
+
+        let restored = SettingsStore(defaults: suite)
+        #expect(restored.shortcut(for: .reload) == custom)
+        #expect(restored.shortcut(for: .reload).display == "⌥⌘K")
+        restored.resetKeyboardShortcuts()
+        #expect(restored.shortcut(for: .newTab) == BrowserShortcutDefaults.values[.newTab])
+    }
+
+    @Test func appearanceCustomizationPersists() {
+        let suite = UserDefaults(suiteName: UUID().uuidString)!
+        var settings: SettingsStore? = SettingsStore(defaults: suite)
+        settings?.value.tabPlacement = .left
+        settings?.value.toolbarStyle = .floating
+        settings?.value.toolbarIconScale = .large
+        settings?.value.newTabBackgroundStyle = .solid
+        settings?.value.useCustomAccent = true
+        settings?.value.useWorkspaceAccent = false
+        settings?.value.customAccent = UserAccentColor(
+            red: 0.1,
+            green: 0.2,
+            blue: 0.3,
+            opacity: 1
+        )
+        settings = nil
+
+        let restored = SettingsStore(defaults: suite)
+        #expect(restored.value.tabPlacement == .left)
+        #expect(restored.value.toolbarStyle == .floating)
+        #expect(restored.value.toolbarIconScale == .large)
+        #expect(restored.value.newTabBackgroundStyle == .solid)
+        #expect(restored.value.useCustomAccent)
+        #expect(!restored.value.useWorkspaceAccent)
+        #expect(restored.value.customAccent == UserAccentColor(
+            red: 0.1,
+            green: 0.2,
+            blue: 0.3,
+            opacity: 1
+        ))
+    }
+
+    @Test func historyAutocompletePrefersFrequentlyVisitedPrefixMatches() {
+        let manager = LibraryManager(defaults: UserDefaults(suiteName: UUID().uuidString)!)
+        let calendar = URL(string: "https://calendar.example/")!
+        let chat = URL(string: "https://chatgpt.com/")!
+        let start = Date(timeIntervalSince1970: 1_000)
+
+        manager.recordVisit(title: "Calendar", url: calendar, at: start)
+        manager.recordVisit(title: "Calendar", url: calendar, at: start.addingTimeInterval(31))
+        manager.recordVisit(title: "Calendar", url: calendar, at: start.addingTimeInterval(62))
+        manager.recordVisit(title: "ChatGPT", url: chat, at: start.addingTimeInterval(93))
+
+        #expect(manager.autocompleteSuggestion(for: "c") == "calendar.example")
+        #expect(manager.autocompleteSuggestion(for: "ch") == "chatgpt.com")
+        #expect(manager.autocompleteSuggestion(for: "search words") == nil)
+    }
+
+    @Test func legacyHistoryWithoutVisitCountStillLoads() throws {
+        struct LegacyEntry: Encodable {
+            let id: UUID
+            let title: String
+            let url: URL
+            let date: Date
+        }
+
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let original = LegacyEntry(
+            id: UUID(),
+            title: "Example",
+            url: URL(string: "https://example.com")!,
+            date: .now
+        )
+        defaults.set(try JSONEncoder().encode([original]), forKey: "library.history.v1")
+
+        let manager = LibraryManager(defaults: defaults)
+        #expect(manager.history.first?.visitCount == 1)
+        #expect(manager.autocompleteSuggestion(for: "e") == "example.com")
     }
 
     @Test func webKitUsesPersistentWebsiteSessions() {
         let configuration = BrowserConfiguration.default.makeWebViewConfiguration()
         #expect(configuration.websiteDataStore.isPersistent)
+    }
+
+    @Test func privateTabsUseEphemeralStorageAndNeverRecordHistory() throws {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let library = LibraryManager(defaults: defaults)
+        let manager = TabManager(
+            webViewFactory: WebViewFactory(configuration: .default),
+            sessionStore: SessionStore(defaults: defaults),
+            restoresPreviousSession: false
+        )
+        manager.libraryManager = library
+        let privateTab = manager.createPrivateTab(opening: URL(string: "https://private.example"))
+
+        #expect(privateTab.isPrivate)
+        #expect(!privateTab.webView.configuration.websiteDataStore.isPersistent)
+        manager.tabDidFinishNavigation(privateTab)
+        #expect(library.history.isEmpty)
+    }
+
+    @Test func privateTabsAreExcludedFromRestoredSessions() throws {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let store = SessionStore(defaults: defaults)
+        let manager = TabManager(
+            webViewFactory: WebViewFactory(configuration: .default),
+            sessionStore: store,
+            restoresPreviousSession: false
+        )
+        let regularTabID = try #require(manager.selectedTabID)
+        manager.createPrivateTab(opening: URL(string: "https://private.example"))
+        manager.closeTab(id: regularTabID)
+        manager.saveSession()
+
+        #expect(store.load()?.tabs.isEmpty == true)
+        #expect(store.load()?.windows.isEmpty == true)
+    }
+
+    @Test func historyAPINavigationUpdatesBackAndForwardState() async throws {
+        let webView = WebViewFactory(configuration: .default).makeWebView()
+        let tab = BrowserTab(webView: webView)
+        defer { tab.tearDown() }
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: "leaf-navigation-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let first = directory.appending(path: "first.html")
+        let second = directory.appending(path: "second.html")
+        try Data("<html><head><title>First</title></head><body>First</body></html>".utf8).write(to: first)
+        try Data("<html><head><title>Second</title></head><body>Second</body></html>".utf8).write(to: second)
+        webView.loadFileURL(first, allowingReadAccessTo: directory)
+
+        for _ in 0..<100 where tab.title != "First" {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        webView.loadFileURL(second, allowingReadAccessTo: directory)
+        for _ in 0..<100 where tab.title != "Second" || !tab.canGoBack {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(tab.title == "Second")
+        #expect(tab.canGoBack)
+
+        #expect(tab.navigateBack())
+        for _ in 0..<100 where tab.title != "First" {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(tab.title == "First")
+        #expect(tab.canGoForward)
+
+        #expect(tab.navigateForward())
+        for _ in 0..<100 where tab.title != "Second" {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(tab.title == "Second")
+        #expect(NavigationStateScriptProvider.source.contains("sameDocumentCanGoBack"))
+        #expect(NavigationStateScriptProvider.source.contains("history[method]"))
     }
 
     @Test func startupCanSkipTheSavedTabSession() {
@@ -156,6 +378,255 @@ struct LeafOrLeaveTests {
         #expect(manager.tabs.count == 1)
         #expect(manager.selectedTab?.url == nil)
         #expect(manager.selectedTab?.title == "New Tab")
+    }
+
+    @Test func splitModeShowsAtMostThreeDistinctTabsAndTracksFocus() throws {
+        let first = UUID(), second = UUID(), third = UUID(), fourth = UUID()
+        let window = BrowserWindowState(
+            tabIDs: [first, second, third, fourth],
+            visibleTabIDs: [first],
+            focusedTabID: first
+        )
+
+        #expect(window.addSplit(second))
+        #expect(window.addSplit(third))
+        #expect(!window.addSplit(fourth))
+        #expect(window.visibleTabIDs == [first, second, third])
+        #expect(window.focusedTabID == third)
+
+        window.removeSplit(second)
+        #expect(window.visibleTabIDs == [first, third])
+        window.exitSplit(keeping: first)
+        #expect(window.visibleTabIDs == [first])
+        #expect(window.focusedTabID == first)
+    }
+
+    @Test func splitResizeKeepsPanelsValidAndOnlyMovesAdjacentPanels() {
+        let starting = [0.25, 0.35, 0.40]
+        let resized = BrowserWindowState.resizedSplitFractions(
+            from: starting,
+            after: 0,
+            translation: 500,
+            availableWidth: 1_000,
+            minimumPanelWidth: 180
+        )
+
+        #expect(abs(resized.reduce(0, +) - 1) < 0.000_001)
+        #expect(resized[0] >= 0.18)
+        #expect(resized[1] >= 0.18)
+        #expect(abs(resized[2] - starting[2]) < 0.000_001)
+
+        let resizedBack = BrowserWindowState.resizedSplitFractions(
+            from: resized,
+            after: 1,
+            translation: -1_000,
+            availableWidth: 1_000,
+            minimumPanelWidth: 180
+        )
+        #expect(resizedBack[1] >= 0.18)
+        #expect(resizedBack[2] >= 0.18)
+        #expect(abs(resizedBack.reduce(0, +) - 1) < 0.000_001)
+    }
+
+    @Test func movingTabBetweenWindowsPreservesTheWebViewInstance() throws {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let manager = TabManager(
+            webViewFactory: WebViewFactory(configuration: .default),
+            sessionStore: SessionStore(defaults: defaults),
+            restoresPreviousSession: false
+        )
+        let source = try #require(manager.activeWindow)
+        let movedTab = manager.createTab(in: source.id)
+        let originalWebView = movedTab.webView
+
+        let destination = manager.createWindow(moving: movedTab.id)
+
+        #expect(!source.tabIDs.contains(movedTab.id))
+        #expect(destination.tabIDs.contains(movedTab.id))
+        #expect(manager.tab(id: movedTab.id)?.webView === originalWebView)
+        #expect(manager.ownerWindow(of: movedTab.id)?.id == destination.id)
+    }
+
+    @Test func dragDetachDecisionUsesPointerAndDestinationWindow() {
+        let source = UUID(), destination = UUID()
+        let frame = CGRect(x: 100, y: 100, width: 900, height: 650)
+
+        #expect(!TabDragDetachDecision.shouldDetach(
+            hasDraggedTab: true, dragTargetWindowID: source, sourceWindowID: source,
+            pointer: CGPoint(x: 400, y: 400), sourceFrame: frame
+        ))
+        #expect(TabDragDetachDecision.shouldDetach(
+            hasDraggedTab: true, dragTargetWindowID: source, sourceWindowID: source,
+            pointer: CGPoint(x: 1_150, y: 400), sourceFrame: frame
+        ))
+        #expect(!TabDragDetachDecision.shouldDetach(
+            hasDraggedTab: true, dragTargetWindowID: destination, sourceWindowID: source,
+            pointer: CGPoint(x: 1_150, y: 400), sourceFrame: frame
+        ))
+    }
+
+    @Test func tabDragTypeCannotBeExportedAsDesktopFileData() {
+        #expect(!UTType.leafBrowserTab.conforms(to: .data))
+        #expect(!UTType.leafBrowserTab.conforms(to: .fileURL))
+    }
+
+    @Test func tabDragPreviewReordersSmoothlyAndCancelRestoresOriginalOrder() throws {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let manager = TabManager(
+            webViewFactory: WebViewFactory(configuration: .default),
+            sessionStore: SessionStore(defaults: defaults),
+            restoresPreviousSession: false
+        )
+        let window = try #require(manager.activeWindow)
+        let second = manager.createTab(activate: false, in: window.id)
+        let third = manager.createTab(activate: false, in: window.id)
+        let originalOrder = window.tabIDs
+
+        manager.beginDragging(tabID: third.id, from: window.id)
+        manager.previewDraggedTab(
+            in: window.id,
+            relativeTo: originalOrder[0],
+            placeAfter: false
+        )
+        #expect(window.tabIDs.first == third.id)
+
+        manager.cancelDragging()
+        #expect(window.tabIDs == originalOrder)
+        #expect(window.tabIDs.contains(second.id))
+    }
+
+    @Test func tabDropCanInsertIntoAnotherWindowAtTheTargetPosition() throws {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let manager = TabManager(
+            webViewFactory: WebViewFactory(configuration: .default),
+            sessionStore: SessionStore(defaults: defaults),
+            restoresPreviousSession: false
+        )
+        let source = try #require(manager.activeWindow)
+        let moved = manager.createTab(activate: false, in: source.id)
+        let originalWebView = moved.webView
+        let destination = manager.createWindow()
+        let target = try #require(destination.tabIDs.first)
+
+        manager.beginDragging(tabID: moved.id, from: source.id)
+        #expect(manager.completeDrop(
+            in: destination.id,
+            relativeTo: target,
+            placeAfter: false
+        ))
+
+        #expect(destination.tabIDs.first == moved.id)
+        #expect(!source.tabIDs.contains(moved.id))
+        #expect(manager.ownerWindow(of: moved.id)?.id == destination.id)
+        #expect(manager.tab(id: moved.id)?.webView === originalWebView)
+        #expect(manager.draggedTabID == nil)
+    }
+
+    @Test func liveDetachedTabCanReturnAndLeavesDetachedWindowEmpty() throws {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let manager = TabManager(
+            webViewFactory: WebViewFactory(configuration: .default),
+            sessionStore: SessionStore(defaults: defaults),
+            restoresPreviousSession: false
+        )
+        let originalWindow = try #require(manager.activeWindow)
+        let tabID = try #require(originalWindow.tabIDs.first)
+
+        manager.beginDragging(tabID: tabID, from: originalWindow.id)
+        let detachedWindow = manager.createWindow(moving: tabID)
+
+        #expect(manager.dragSourceWindowID == detachedWindow.id)
+        #expect(detachedWindow.tabIDs == [tabID])
+        #expect(originalWindow.tabIDs.isEmpty)
+
+        #expect(manager.completeDrop(in: originalWindow.id))
+        #expect(originalWindow.tabIDs == [tabID])
+        #expect(detachedWindow.tabIDs.isEmpty)
+        #expect(manager.ownerWindow(of: tabID)?.id == originalWindow.id)
+    }
+
+    @Test func repeatedCrossWindowDragsNeverCreateReplacementTabs() throws {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let manager = TabManager(
+            webViewFactory: WebViewFactory(configuration: .default),
+            sessionStore: SessionStore(defaults: defaults),
+            restoresPreviousSession: false
+        )
+        let original = try #require(manager.activeWindow)
+        let movingTab = manager.createTab(activate: false, in: original.id)
+        let other = manager.createWindow()
+        let originalTabIDs = Set(manager.tabs.map(\.id))
+
+        for _ in 0..<6 {
+            manager.beginDragging(tabID: movingTab.id, from: original.id)
+            #expect(manager.completeDrop(in: other.id))
+            #expect(manager.ownerWindow(of: movingTab.id)?.id == other.id)
+
+            manager.beginDragging(tabID: movingTab.id, from: other.id)
+            #expect(manager.completeDrop(in: original.id))
+            #expect(manager.ownerWindow(of: movingTab.id)?.id == original.id)
+        }
+
+        #expect(Set(manager.tabs.map(\.id)) == originalTabIDs)
+        #expect(manager.tabs.count == originalTabIDs.count)
+        #expect(manager.windows.flatMap(\.tabIDs).filter { $0 == movingTab.id }.count == 1)
+    }
+
+    @Test func sessionRestoresWindowOwnershipAndSplitLayout() throws {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let store = SessionStore(defaults: defaults)
+        let manager = TabManager(
+            webViewFactory: WebViewFactory(configuration: .default),
+            sessionStore: store,
+            restoresPreviousSession: false
+        )
+        let firstWindow = try #require(manager.activeWindow)
+        let secondTab = manager.createTab(activate: false, in: firstWindow.id)
+        #expect(manager.addToSplit(tabID: secondTab.id, in: firstWindow.id))
+        firstWindow.setSplitFractions([0.62, 0.38])
+        firstWindow.frame = CGRect(x: 40, y: 60, width: 1100, height: 720)
+
+        let thirdTab = manager.createTab(activate: false, in: firstWindow.id)
+        let secondWindow = manager.createWindow(moving: thirdTab.id)
+        manager.saveSession()
+
+        let restored = TabManager(
+            webViewFactory: WebViewFactory(configuration: .default),
+            sessionStore: store,
+            restoresPreviousSession: true
+        )
+        let restoredFirst = try #require(restored.window(id: firstWindow.id))
+        let restoredSecond = try #require(restored.window(id: secondWindow.id))
+
+        #expect(restored.windows.count == 2)
+        #expect(restoredFirst.visibleTabIDs.count == 2)
+        #expect(restoredFirst.splitFractions == [0.62, 0.38])
+        #expect(restoredFirst.frame == firstWindow.frame)
+        #expect(restoredSecond.tabIDs == [thirdTab.id])
+        #expect(Set(restored.windows.flatMap(\.tabIDs)) == Set(restored.tabs.map(\.id)))
+    }
+
+    @Test func closingEveryWindowPersistsAnEmptySessionAndCanReopenSafely() throws {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let store = SessionStore(defaults: defaults)
+        let manager = TabManager(
+            webViewFactory: WebViewFactory(configuration: .default),
+            sessionStore: store,
+            restoresPreviousSession: false
+        )
+        let window = try #require(manager.activeWindow)
+        let closedTabID = try #require(manager.selectedTabID)
+
+        manager.closeWindow(id: window.id)
+
+        #expect(manager.windows.isEmpty)
+        #expect(manager.tabs.isEmpty)
+        #expect(store.load()?.tabs.isEmpty == true)
+
+        let reopenedWindowID = manager.initialWindowID
+        #expect(manager.window(id: reopenedWindowID) != nil)
+        #expect(manager.tabs.count == 1)
+        #expect(manager.selectedTabID != closedTabID)
     }
 
     @Test func passwordCredentialsNormalizeHostsAndEscapeAutofillPayload() throws {
@@ -450,6 +921,30 @@ struct LeafOrLeaveTests {
         let model = EqualizerViewModel()
         model.select(EqualizerPreset(name: "Test", gains: [6, 0, 0, 0, 0, 0, 0, 0, 0, 0]))
         #expect(model.preamp == -6)
+    }
+
+    @Test func equalizerProcessorIsInstalledAtDocumentStart() async throws {
+        let webView = WebViewFactory(configuration: .default).makeWebView()
+        let tab = BrowserTab(webView: webView)
+        defer { tab.tearDown() }
+        webView.loadHTMLString("<html><body><audio controls></audio></body></html>", baseURL: nil)
+
+        var installed = false
+        for _ in 0..<80 {
+            if let result = try? await webView.evaluateJavaScript(
+                "typeof window.__leafEqualizerController?.apply === 'function'"
+            ) as? Bool, result {
+                installed = true
+                break
+            }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+
+        #expect(installed)
+        #expect(EqualizerScriptProvider.source.contains(
+            "state.enabled ? Math.pow(10, state.preamp / 20) : 1"
+        ))
+        #expect(EqualizerScriptProvider.source.contains("document.addEventListener('play'"))
     }
 
     @Test func sharedFormattingProducesStableBrowserLabels() {

@@ -66,7 +66,7 @@ struct DeveloperConsoleView: View {
             if !result.isEmpty {
                 Text(result).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading).padding(10)
-                    .background(.black.opacity(0.18))
+                    .background(Color.primary.opacity(0.05))
             }
         }
         .frame(minWidth: 760, idealWidth: 900, minHeight: 520, idealHeight: 650)

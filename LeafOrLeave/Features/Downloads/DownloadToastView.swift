@@ -47,7 +47,7 @@ struct DownloadToastView: View {
         .padding(14)
         .frame(width: 320)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-        .overlay { RoundedRectangle(cornerRadius: 15).strokeBorder(.white.opacity(0.10)) }
+        .overlay { RoundedRectangle(cornerRadius: 15).strokeBorder(Color.primary.opacity(0.10)).allowsHitTesting(false) }
         .shadow(color: .black.opacity(0.25), radius: 18, y: 8)
         .accessibilityElement(children: .contain)
     }
@@ -85,6 +85,8 @@ struct DownloadToastView: View {
 }
 
 struct DownloadToolbarButton: View {
+    @Environment(\.leafAccentColor) private var accentColor
+    @Environment(\.leafToolbarIconSize) private var toolbarIconSize
     let activeCount: Int
     let latestProgress: Double
     let action: () -> Void
@@ -96,27 +98,31 @@ struct DownloadToolbarButton: View {
                 if activeCount > 0 {
                     Circle()
                         .trim(from: 0, to: max(0.03, latestProgress))
-                        .stroke(LeafColors.accent, style: StrokeStyle(lineWidth: 2.2, lineCap: .round))
+                        .stroke(accentColor, style: StrokeStyle(lineWidth: 2.2, lineCap: .round))
                         .rotationEffect(.degrees(-90))
                         .frame(width: 27, height: 27)
                         .animation(.easeOut(duration: 0.2), value: latestProgress)
                 }
                 Image(systemName: activeCount > 0 ? "arrow.down" : "arrow.down.circle")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: toolbarIconSize, weight: .semibold))
                 if activeCount > 1 {
                     Text("\(activeCount)")
                         .font(.system(size: 8, weight: .bold))
                         .foregroundStyle(.white)
                         .frame(minWidth: 14, minHeight: 14)
-                        .background(LeafColors.accent, in: Circle())
+                        .background(accentColor, in: Circle())
                         .offset(x: 11, y: -10)
                 }
-            }.frame(width: BrowserChromeMetrics.controlSize, height: BrowserChromeMetrics.controlSize)
+            }
+            .frame(width: BrowserChromeMetrics.controlSize, height: BrowserChromeMetrics.controlSize)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .foregroundStyle(activeCount > 0 ? LeafColors.accent : .secondary)
+        .frame(width: BrowserChromeMetrics.controlSize, height: BrowserChromeMetrics.controlSize)
+        .contentShape(Rectangle())
+        .foregroundStyle(activeCount > 0 ? accentColor : .secondary)
         .background(isHovered ? LeafColors.chromeHover : .clear,
-                    in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    in: RoundedRectangle(cornerRadius: BrowserChromeMetrics.toolbarControlCornerRadius, style: .continuous))
         .onHover { isHovered = $0 }
         .cursorHelp(activeCount > 0 ? "\(activeCount) active download\(activeCount == 1 ? "" : "s")" : "Downloads")
         .accessibilityLabel(activeCount > 0 ? "\(activeCount) active downloads" : "Downloads")

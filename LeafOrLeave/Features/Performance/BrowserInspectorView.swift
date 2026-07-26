@@ -9,7 +9,7 @@ struct BrowserInspectorView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack { Text("Browser Inspector").font(.headline); Spacer(); Button { dismiss() } label: { Image(systemName: "xmark").frame(width: 26, height: 26) }.buttonStyle(.plain).background(.white.opacity(0.07), in: Circle()) }
+            HStack { Text("Browser Inspector").font(.headline); Spacer(); Button { dismiss() } label: { Image(systemName: "xmark").frame(width: 26, height: 26) }.buttonStyle(.plain).background(Color.primary.opacity(0.07), in: Circle()) }
                 .padding(.horizontal, 20).padding(.vertical, 16)
             Divider()
             Form {

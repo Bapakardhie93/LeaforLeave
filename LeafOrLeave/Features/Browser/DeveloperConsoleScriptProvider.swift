@@ -8,6 +8,7 @@ enum DeveloperConsoleScriptProvider {
       if (window.__leafDeveloperConsoleInstalled) return;
       window.__leafDeveloperConsoleInstalled = true;
       const send = (level, values) => {
+        if (window.__leafDeveloperConsoleCaptureEnabled !== true) return;
         try {
           const message = values.map(value => {
             if (typeof value === 'string') return value;

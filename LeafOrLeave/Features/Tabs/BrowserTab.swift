@@ -4,6 +4,10 @@ import WebKit
 import AppKit
 import AVFoundation
 
+private enum WebViewObservation: Sendable {
+    case title, url, loading, progress, backForward
+}
+
 enum BrowserTabState: String, Codable { case active, background, sleeping, frozen, discarded }
 
 struct PasswordAutofillAccount: Identifiable, Equatable {
@@ -35,8 +39,11 @@ private struct ObservedPasswordPageState {
 @MainActor
 @Observable
 final class BrowserTab: NSObject, Identifiable, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
+    private static let faviconCache = NSCache<NSURL, NSImage>()
+
     let id: UUID
     let webView: WKWebView
+    let isPrivate: Bool
     var title: String
     var url: URL?
     var isLoading = false
@@ -61,6 +68,7 @@ final class BrowserTab: NSObject, Identifiable, WKNavigationDelegate, WKUIDelega
     var passwordAutofillAccounts: [PasswordAutofillAccount] = []
     var passwordAutofillHost: String?
     var passwordSaveOffer: PasswordSaveOffer?
+    private(set) var lastFailedURL: URL?
 
     weak var manager: TabManager?
     private var observations: [NSKeyValueObservation] = []
@@ -76,10 +84,15 @@ final class BrowserTab: NSObject, Identifiable, WKNavigationDelegate, WKUIDelega
     private var passwordSubmissionConfirmationTask: Task<Void, Never>?
     private var pendingPasswordExpiryTask: Task<Void, Never>?
     private var passwordSaveOfferExpiryTask: Task<Void, Never>?
+    private var faviconHost: String?
+    private var sameDocumentCanGoBack = false
+    private var sameDocumentCanGoForward = false
 
-    init(id: UUID = UUID(), webView: WKWebView, title: String = "New Tab", url: URL? = nil) {
+    init(id: UUID = UUID(), webView: WKWebView, title: String = "New Tab", url: URL? = nil,
+         isPrivate: Bool = false) {
         self.id = id
         self.webView = webView
+        self.isPrivate = isPrivate
         self.title = title
         self.url = url
         super.init()
@@ -87,14 +100,63 @@ final class BrowserTab: NSObject, Identifiable, WKNavigationDelegate, WKUIDelega
         webView.uiDelegate = self
         webView.configuration.userContentController.add(self, name: MediaScriptProvider.name)
         webView.configuration.userContentController.addUserScript(MediaScriptProvider.script)
+        webView.configuration.userContentController.addUserScript(EqualizerScriptProvider.script)
         webView.configuration.userContentController.add(self, name: DeveloperConsoleScriptProvider.name)
         webView.configuration.userContentController.addUserScript(DeveloperConsoleScriptProvider.script)
         webView.configuration.userContentController.add(self, name: PasswordScriptProvider.name)
         webView.configuration.userContentController.addUserScript(PasswordScriptProvider.script)
+        webView.configuration.userContentController.add(self, name: NavigationStateScriptProvider.name)
+        webView.configuration.userContentController.addUserScript(NavigationStateScriptProvider.script)
         observeWebView()
     }
 
-    func load(_ url: URL) { webView.load(URLRequest(url: url)) }
+    func load(_ url: URL) {
+        navigationError = nil
+        lastFailedURL = nil
+        webView.load(URLRequest(url: url))
+    }
+
+    func retryLastNavigation() {
+        navigationError = nil
+        if let lastFailedURL {
+            self.lastFailedURL = nil
+            webView.load(URLRequest(url: lastFailedURL))
+        } else if webView.url != nil || url != nil {
+            webView.reload()
+        }
+    }
+
+    @discardableResult
+    func navigateBack() -> Bool {
+        if let item = webView.backForwardList.backItem {
+            navigationError = nil
+            webView.go(to: item)
+            syncNavigationState(afterNavigation: true)
+            return true
+        }
+        guard sameDocumentCanGoBack else {
+            syncNavigationState()
+            return false
+        }
+        webView.evaluateJavaScript("history.back()")
+        return true
+    }
+
+    @discardableResult
+    func navigateForward() -> Bool {
+        if let item = webView.backForwardList.forwardItem {
+            navigationError = nil
+            webView.go(to: item)
+            syncNavigationState(afterNavigation: true)
+            return true
+        }
+        guard sameDocumentCanGoForward else {
+            syncNavigationState()
+            return false
+        }
+        webView.evaluateJavaScript("history.forward()")
+        return true
+    }
 
     func sleep() { guard lifecycleState == .background else { return }; lifecycleState = .sleeping }
 
@@ -153,6 +215,7 @@ final class BrowserTab: NSObject, Identifiable, WKNavigationDelegate, WKUIDelega
         webView.configuration.userContentController.removeScriptMessageHandler(forName: MediaScriptProvider.name)
         webView.configuration.userContentController.removeScriptMessageHandler(forName: DeveloperConsoleScriptProvider.name)
         webView.configuration.userContentController.removeScriptMessageHandler(forName: PasswordScriptProvider.name)
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: NavigationStateScriptProvider.name)
         observations.forEach { $0.invalidate() }
         observations.removeAll()
         mediaTask?.cancel()
@@ -171,37 +234,99 @@ final class BrowserTab: NSObject, Identifiable, WKNavigationDelegate, WKUIDelega
 
     private func observeWebView() {
         observations = [
-            webView.observe(\.title, options: [.initial, .new]) { [weak self] _, _ in self?.syncOnMain() },
-            webView.observe(\.url, options: [.initial, .new]) { [weak self] _, _ in self?.syncOnMain() },
-            webView.observe(\.isLoading, options: [.initial, .new]) { [weak self] _, _ in self?.syncOnMain() },
-            webView.observe(\.estimatedProgress, options: [.initial, .new]) { [weak self] _, _ in self?.syncOnMain() },
-            webView.observe(\.canGoBack, options: [.initial, .new]) { [weak self] _, _ in self?.syncOnMain() },
-            webView.observe(\.canGoForward, options: [.initial, .new]) { [weak self] _, _ in self?.syncOnMain() }
+            webView.observe(\.title, options: [.initial, .new]) { [weak self] _, _ in self?.syncOnMain(.title) },
+            webView.observe(\.url, options: [.initial, .new]) { [weak self] _, _ in self?.syncOnMain(.url) },
+            webView.observe(\.isLoading, options: [.initial, .new]) { [weak self] _, _ in self?.syncOnMain(.loading) },
+            webView.observe(\.estimatedProgress, options: [.initial, .new]) { [weak self] _, _ in self?.syncOnMain(.progress) },
+            webView.observe(\.canGoBack, options: [.initial, .new]) { [weak self] _, _ in self?.syncOnMain(.backForward) },
+            webView.observe(\.canGoForward, options: [.initial, .new]) { [weak self] _, _ in self?.syncOnMain(.backForward) }
         ]
     }
 
-    nonisolated private func syncOnMain() {
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            title = webView.title?.isEmpty == false ? webView.title! : (url == nil ? "New Tab" : "Loading…")
-            url = webView.url
-            isLoading = webView.isLoading
-            estimatedProgress = webView.estimatedProgress
-            canGoBack = webView.canGoBack
-            canGoForward = webView.canGoForward
+    private func syncNavigationState(afterNavigation: Bool = false) {
+        let currentURL = webView.url
+        if url != currentURL {
+            url = currentURL
+            refreshFavicon()
             manager?.tabDidChange(self)
-            refreshPageMetadata()
+        }
+        let currentTitle = webView.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let nextTitle = currentTitle.isEmpty ? (currentURL == nil ? "New Tab" : "Loading…") : currentTitle
+        if title != nextTitle {
+            title = nextTitle
+            manager?.tabDidChange(self)
+        }
+        canGoBack = webView.backForwardList.backItem != nil || sameDocumentCanGoBack
+        canGoForward = webView.backForwardList.forwardItem != nil || sameDocumentCanGoForward
+
+        guard afterNavigation else { return }
+        Task { @MainActor [weak self] in
+            await Task.yield()
+            self?.syncNavigationState()
         }
     }
 
-    private func refreshPageMetadata() {
-        faviconTask?.cancel()
-        if let host = url?.host, let iconURL = URL(string: "https://\(host)/favicon.ico") {
-            faviconTask = Task { [weak self] in
-                if let (data, _) = try? await URLSession.shared.data(from: iconURL),
-                   let image = NSImage(data: data) { self?.favicon = image }
+    nonisolated private func syncOnMain(_ observation: WebViewObservation) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            switch observation {
+            case .title:
+                let value = webView.title?.isEmpty == false
+                    ? webView.title!
+                    : (url == nil ? "New Tab" : "Loading…")
+                guard value != title else { return }
+                title = value
+                manager?.tabDidChange(self)
+            case .url:
+                let value = webView.url
+                guard value != url else { return }
+                url = value
+                manager?.tabDidChange(self)
+                refreshFavicon()
+            case .loading:
+                let value = webView.isLoading
+                guard value != isLoading else { return }
+                isLoading = value
+            case .progress:
+                let value = webView.estimatedProgress
+                guard value != estimatedProgress else { return }
+                estimatedProgress = value
+            case .backForward:
+                let newCanGoBack = webView.canGoBack || sameDocumentCanGoBack
+                let newCanGoForward = webView.canGoForward || sameDocumentCanGoForward
+                if canGoBack != newCanGoBack { canGoBack = newCanGoBack }
+                if canGoForward != newCanGoForward { canGoForward = newCanGoForward }
             }
         }
+    }
+
+    private func refreshFavicon() {
+        faviconTask?.cancel()
+        guard let host = url?.host,
+              let iconURL = URL(string: "https://\(host)/favicon.ico") else {
+            faviconHost = nil
+            favicon = nil
+            return
+        }
+        guard host != faviconHost || favicon == nil else { return }
+        faviconHost = host
+        favicon = nil
+        if let cached = Self.faviconCache.object(forKey: iconURL as NSURL) {
+            favicon = cached
+            return
+        }
+
+        faviconTask = Task { [weak self] in
+            guard let (data, response) = try? await URLSession.shared.data(from: iconURL),
+                  ((response as? HTTPURLResponse)?.statusCode ?? 200) < 400,
+                  let image = NSImage(data: data),
+                  let self, faviconHost == host else { return }
+            Self.faviconCache.setObject(image, forKey: iconURL as NSURL)
+            favicon = image
+        }
+    }
+
+    private func refreshMediaMetadata() {
         mediaTask?.cancel()
         mediaTask = Task { [weak self] in
             guard let self else { return }
@@ -217,25 +342,48 @@ final class BrowserTab: NSObject, Identifiable, WKNavigationDelegate, WKUIDelega
         }
     }
 
-    func webView(_ webView: WKWebView, didFail navigation: WKNavigation?, withError error: Error) { report(error) }
-    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation?, withError error: Error) { report(error) }
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation?, withError error: Error) {
+        syncNavigationState()
+        report(error)
+    }
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation?, withError error: Error) {
+        syncNavigationState()
+        report(error)
+    }
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         LeafLog.error("Web content process terminated", category: .browser)
+        lastFailedURL = webView.url ?? url
         navigationError = .processTerminated
     }
 
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation?) {
+        sameDocumentCanGoBack = false
+        sameDocumentCanGoForward = false
+        syncNavigationState(afterNavigation: true)
         passwordAutofillDismissedForNavigation = false
         passwordAutofillAccounts = []
         passwordAutofillHost = nil
     }
 
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation?) {
+        navigationError = nil
+        lastFailedURL = nil
+        syncNavigationState(afterNavigation: true)
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation?) {
+        syncNavigationState()
         let captureEnabled = manager?.settings?.value.offerToSavePasswords == true
+        let consoleCaptureEnabled = manager?.settings?.value.developerMode == true
+            && manager?.settings?.value.captureConsoleLogs == true
         webView.evaluateJavaScript("""
         window.__leafPasswordCaptureEnabled = \(captureEnabled ? "true" : "false");
+        window.__leafDeveloperConsoleCaptureEnabled = \(consoleCaptureEnabled ? "true" : "false");
         window.__leafPasswordManagerRefresh?.();
         """)
+        manager?.tabDidFinishNavigation(self)
+        refreshFavicon()
+        refreshMediaMetadata()
     }
 
     private func report(_ error: Error) {
@@ -252,9 +400,13 @@ final class BrowserTab: NSObject, Identifiable, WKNavigationDelegate, WKUIDelega
         // before LAN-aware address resolution was added. If that local HTTPS
         // endpoint refuses the connection, retry its HTTP endpoint once. The
         // fallback can never apply to public hosts or to an already-HTTP URL.
+        let failedURL = (value.userInfo[NSURLErrorFailingURLErrorKey] as? URL)
+            ?? (value.userInfo[NSURLErrorFailingURLStringErrorKey] as? String).flatMap(URL.init(string:))
+            ?? webView.url
+            ?? url
         if value.domain == NSURLErrorDomain,
            [NSURLErrorCannotConnectToHost, NSURLErrorTimedOut].contains(value.code),
-           let failedURL = value.userInfo[NSURLErrorFailingURLErrorKey] as? URL ?? webView.url,
+           let failedURL,
            let fallbackURL = URLResolver().localHTTPFallback(for: failedURL) {
             LeafLog.notice("Retrying a local-network address over HTTP", category: .browser)
             navigationError = nil
@@ -265,13 +417,18 @@ final class BrowserTab: NSObject, Identifiable, WKNavigationDelegate, WKUIDelega
             "Navigation failed (\(value.domain) \(value.code))",
             category: .browser
         )
-        navigationError = .navigationFailed(value.localizedDescription)
+        lastFailedURL = failedURL
+        navigationError = .navigationFailure(from: value, failingURL: failedURL)
     }
 
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
                  for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
         guard navigationAction.targetFrame == nil else { return nil }
-        return manager?.handlePopup(request: navigationAction.request, configuration: configuration)
+        return manager?.handlePopup(
+            request: navigationAction.request,
+            configuration: configuration,
+            isPrivate: isPrivate
+        )
     }
 
     func webViewDidClose(_ webView: WKWebView) { manager?.closeTab(id: id) }
@@ -333,7 +490,27 @@ final class BrowserTab: NSObject, Identifiable, WKNavigationDelegate, WKUIDelega
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let value = message.body as? [String: Any] else { return }
+        if message.name == NavigationStateScriptProvider.name {
+            let oldURL = url
+            if let href = value["href"] as? String, let currentURL = URL(string: href) {
+                url = currentURL
+            } else {
+                url = webView.url
+            }
+            if let pageTitle = value["title"] as? String,
+               !pageTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                title = pageTitle
+            }
+            sameDocumentCanGoBack = value["sameDocumentCanGoBack"] as? Bool ?? false
+            sameDocumentCanGoForward = value["sameDocumentCanGoForward"] as? Bool ?? false
+            canGoBack = webView.backForwardList.backItem != nil || sameDocumentCanGoBack
+            canGoForward = webView.backForwardList.forwardItem != nil || sameDocumentCanGoForward
+            manager?.tabDidChange(self)
+            if oldURL != url { manager?.tabDidCommitSameDocumentNavigation(self) }
+            return
+        }
         if message.name == PasswordScriptProvider.name {
+            guard !isPrivate else { return }
             let sourceHost = (value["host"] as? String).flatMap {
                 $0.isEmpty ? nil : $0
             } ?? message.frameInfo.securityOrigin.host
@@ -358,7 +535,8 @@ final class BrowserTab: NSObject, Identifiable, WKNavigationDelegate, WKUIDelega
             return
         }
         if message.name == DeveloperConsoleScriptProvider.name {
-            guard manager?.settings?.value.captureConsoleLogs != false else { return }
+            guard manager?.settings?.value.developerMode == true,
+                  manager?.settings?.value.captureConsoleLogs == true else { return }
             let item = DeveloperConsoleMessage(
                 level: value["level"] as? String ?? "log",
                 message: value["message"] as? String ?? "",

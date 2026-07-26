@@ -128,10 +128,11 @@ private struct MediaControlCard: View {
             }
         }
         .padding(14)
-        .background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+        .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .strokeBorder(.white.opacity(0.07))
+                .strokeBorder(Color.primary.opacity(0.07))
+                .allowsHitTesting(false)
         }
         .task { await monitorPlayback() }
     }
@@ -143,7 +144,7 @@ private struct MediaControlCard: View {
                 .frame(width: 31, height: 30)
         }
         .buttonStyle(.plain)
-        .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
+        .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
         .cursorHelp(help)
     }
 

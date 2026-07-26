@@ -2,6 +2,55 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSCameraUsageDescription</key>
+	<string>LeafOrLeave needs camera access only when a website you approve requests video capture.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>LeafOrLeave needs microphone access only when a website you approve requests audio capture.</string>
+	<key>NSLocationUsageDescription</key>
+	<string>LeafOrLeave uses your location only when a website you approve requests it.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>LeafOrLeave uses your location only while you are browsing a website that you approve.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>LeafOrLeave accesses devices and websites on your local network when you navigate to a local address.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>LeafOrLeave accesses contacts only when you explicitly approve a compatible website or browser action.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>LeafOrLeave accesses calendars only when you explicitly approve a compatible website or browser action.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>LeafOrLeave accesses calendars only when you explicitly approve a compatible website or browser action.</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>LeafOrLeave accesses reminders only when you explicitly approve a compatible website or browser action.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>LeafOrLeave accesses reminders only when you explicitly approve a compatible website or browser action.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>LeafOrLeave accesses selected photos only when you choose to upload or use them on a website.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>LeafOrLeave saves images to Photos only when you explicitly request it.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>LeafOrLeave uses speech recognition only when you explicitly enable voice input.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>LeafOrLeave accesses Bluetooth only for websites or devices you explicitly approve.</string>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>LeafOrLeave captures the screen only when you explicitly approve screen sharing.</string>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>LeafOrLeave accesses Desktop files only when you explicitly choose them for upload, download, or viewing.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>LeafOrLeave accesses Documents files only when you explicitly choose them for upload, download, or viewing.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>LeafOrLeave uses the Downloads folder to save files you choose to download.</string>
+	<key>NSNetworkVolumesUsageDescription</key>
+	<string>LeafOrLeave accesses network volumes only when you explicitly choose a file or download destination there.</string>
+	<key>NSRemovableVolumesUsageDescription</key>
+	<string>LeafOrLeave accesses removable drives only when you explicitly choose a file or download destination there.</string>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeDescription</key>
+			<string>LeafOrLeave Browser Tab</string>
+			<key>UTTypeIdentifier</key>
+			<string>app.leaforleave.browser-tab</string>
+		</dict>
+	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoadsInWebContent</key>

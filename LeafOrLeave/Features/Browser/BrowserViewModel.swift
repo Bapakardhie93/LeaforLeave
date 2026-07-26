@@ -81,7 +81,8 @@ final class BrowserViewModel {
     func reportNavigationError(_ error: Error) {
         let nsError = error as NSError
         guard nsError.code != NSURLErrorCancelled else { return }
-        navigationError = .navigationFailed(nsError.localizedDescription)
+        let failingURL = (nsError.userInfo[NSURLErrorFailingURLErrorKey] as? URL) ?? webView.url
+        navigationError = .navigationFailure(from: nsError, failingURL: failingURL)
     }
 
     func reportWebProcessTermination() {

@@ -3,6 +3,7 @@ import AppKit
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSTouchBarProvider {
     static weak var tabManager: TabManager?
+    static var isTerminating = false
     private(set) static var workspaceTouchBarController: WorkspaceTouchBarController?
 
     var touchBar: NSTouchBar? { Self.workspaceTouchBarController?.touchBar }
@@ -37,12 +38,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTouchBarProvider {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard Self.tabManager?.tabs.contains(where: \.isExamProtected) == true else { return .terminateNow }
+        guard Self.tabManager?.tabs.contains(where: \.isExamProtected) == true else {
+            Self.isTerminating = true
+            return .terminateNow
+        }
         let alert = NSAlert()
         alert.messageText = "Protected exam tab is open"
         alert.informativeText = "Quitting may cause unsaved exam answers to be lost."
         alert.addButton(withTitle: "Keep Browser Open")
         alert.addButton(withTitle: "Quit Anyway")
-        return alert.runModal() == .alertSecondButtonReturn ? .terminateNow : .terminateCancel
+        if alert.runModal() == .alertSecondButtonReturn {
+            Self.isTerminating = true
+            return .terminateNow
+        }
+        return .terminateCancel
     }
+
+    func applicationWillTerminate(_ notification: Notification) { Self.isTerminating = true }
 }

@@ -3,6 +3,7 @@ import SwiftUI
 struct TabSearchView: View {
     let manager: TabManager
     let visibleTabIDs: Set<UUID>?
+    let selectedTabID: UUID?
     let select: (UUID) -> Void
     @State private var query = ""
     @FocusState private var searchFocused: Bool
@@ -54,7 +55,7 @@ struct TabSearchView: View {
                                     if tab.isMediaPlaying { Image(systemName: "speaker.wave.2.fill").foregroundStyle(LeafColors.accent) }
                                 }
                                 .padding(.horizontal, 10).frame(height: 48)
-                                .background(tab.id == manager.selectedTabID ? LeafColors.accent.opacity(0.14) : .clear,
+                                .background(tab.id == selectedTabID ? LeafColors.accent.opacity(0.14) : .clear,
                                             in: RoundedRectangle(cornerRadius: 9))
                             }
                             .buttonStyle(.plain)

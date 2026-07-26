@@ -2,6 +2,7 @@ import SwiftUI
 
 struct EqualizerView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.leafAccentColor) private var accentColor
     @Bindable var model: EqualizerViewModel
     let apply: () -> Void
     private let labels = ["32", "64", "125", "250", "500", "1K", "2K", "4K", "8K", "16K"]
@@ -25,9 +26,9 @@ struct EqualizerView: View {
         HStack(spacing: 12) {
             Image(systemName: "slider.vertical.3")
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(LeafColors.accent)
+                .foregroundStyle(accentColor)
                 .frame(width: 34, height: 34)
-                .background(LeafColors.accent.opacity(0.13), in: RoundedRectangle(cornerRadius: 9))
+                .background(accentColor.opacity(0.13), in: RoundedRectangle(cornerRadius: 9))
             VStack(alignment: .leading, spacing: 2) {
                 Text("Equalizer").font(.headline)
                 Text("Fine-tune compatible HTML5 audio and video").font(.caption).foregroundStyle(.secondary)
@@ -39,7 +40,7 @@ struct EqualizerView: View {
             Button { dismiss() } label: {
                 Image(systemName: "xmark").frame(width: 26, height: 26)
             }
-            .buttonStyle(.plain).background(.white.opacity(0.07), in: Circle()).help("Close")
+            .buttonStyle(.plain).background(Color.primary.opacity(0.07), in: Circle()).help("Close")
         }
         .padding(.horizontal, 20).padding(.vertical, 16)
     }
@@ -88,8 +89,8 @@ struct EqualizerView: View {
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 18)
-        .background(.black.opacity(0.16), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay { RoundedRectangle(cornerRadius: 16).strokeBorder(.white.opacity(0.06)) }
+        .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: 16).strokeBorder(Color.primary.opacity(0.07)).allowsHitTesting(false) }
     }
 
     private var footer: some View {
@@ -97,7 +98,7 @@ struct EqualizerView: View {
             Label("Protected or unsupported media remains untouched.", systemImage: "lock.shield")
                 .font(.caption).foregroundStyle(.secondary)
             Spacer()
-            Button("Apply Changes") { apply() }.buttonStyle(.borderedProminent).tint(LeafColors.accent)
+            Button("Apply Changes") { apply() }.buttonStyle(.borderedProminent).tint(accentColor)
         }
     }
 }

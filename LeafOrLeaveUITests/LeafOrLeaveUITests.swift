@@ -86,6 +86,47 @@ final class LeafOrLeaveUITests: XCTestCase {
     }
 
     @MainActor
+    func testLibraryPanelsOpenOnFirstClick() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        let skip = app.buttons["Skip"]
+        if skip.waitForExistence(timeout: 2) { skip.click() }
+
+        try ensureSidebarVisible(in: app)
+
+        try verifyPanelOpens(
+            sidebarButton: "Bookmarks",
+            closeButton: "Close Bookmarks",
+            in: app
+        )
+        try verifyPanelOpens(
+            sidebarButton: "History",
+            closeButton: "Close History",
+            in: app
+        )
+        try verifyPanelOpens(
+            sidebarButton: "Downloads",
+            closeButton: "Close Downloads",
+            in: app
+        )
+    }
+
+    @MainActor
+    private func ensureSidebarVisible(in app: XCUIApplication) throws {
+        guard !app.buttons["Bookmarks"].waitForExistence(timeout: 1) else { return }
+
+        let layoutMenu = app.menuBars.menuBarItems["Layout"]
+        XCTAssertTrue(layoutMenu.waitForExistence(timeout: 3))
+        layoutMenu.click()
+
+        let showSidebar = app.menuBars.menuItems["Show Sidebar"]
+        XCTAssertTrue(showSidebar.waitForExistence(timeout: 3))
+        showSidebar.click()
+        XCTAssertTrue(app.buttons["Bookmarks"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
     private func verifySection(
         _ sidebarTitle: String,
         shows expectedLabel: String,
@@ -101,5 +142,21 @@ final class LeafOrLeaveUITests: XCTestCase {
         attachment.name = screenshotName
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    @MainActor
+    private func verifyPanelOpens(
+        sidebarButton: String,
+        closeButton: String,
+        in app: XCUIApplication
+    ) throws {
+        let trigger = app.buttons.matching(identifier: sidebarButton).firstMatch
+        XCTAssertTrue(trigger.waitForExistence(timeout: 2))
+        trigger.click()
+
+        let close = app.buttons[closeButton]
+        XCTAssertTrue(close.waitForExistence(timeout: 2), "\(sidebarButton) did not open on the first click")
+        close.click()
+        XCTAssertTrue(close.waitForNonExistence(timeout: 2))
     }
 }

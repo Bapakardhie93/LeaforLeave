@@ -24,6 +24,7 @@ struct OmniboxView: View {
         .overlay {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(LeafColors.border, lineWidth: 1)
+                .allowsHitTesting(false)
         }
     }
 

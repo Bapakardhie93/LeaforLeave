@@ -27,7 +27,7 @@ final class NetworkMonitor {
         latencyTask = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.measureLatency()
-                try? await Task.sleep(for: .seconds(1))
+                try? await Task.sleep(for: .seconds(8))
             }
         }
     }
@@ -51,10 +51,7 @@ final class NetworkMonitor {
             else { quality = path.availableInterfaces.contains(where: { $0.type == .wiredEthernet }) ? .excellent : .good }
             if offlineSince != nil {
                 Task { [weak self] in
-                    guard await ConnectivityProbe().validate() else { return }
-                    self?.isConnected = true
-                    self?.offlineSince = nil
-                    LeafLog.notice("Internet connectivity restored", category: .network)
+                    _ = await self?.validateConnectivity()
                 }
             }
         }
@@ -64,6 +61,20 @@ final class NetworkMonitor {
     }
 
     func refreshLatency() { Task { await measureLatency() } }
+
+    @discardableResult
+    func validateConnectivity() async -> Bool {
+        guard await ConnectivityProbe().validate() else { return false }
+        let wasOffline = !isConnected || offlineSince != nil
+        isConnected = true
+        offlineSince = nil
+        if quality == .offline { quality = .good }
+        if wasOffline {
+            LeafLog.notice("Internet connectivity restored", category: .network)
+        }
+        await measureLatency()
+        return true
+    }
 
     private func measureLatency() async {
         guard isConnected else { latencyMS = nil; return }

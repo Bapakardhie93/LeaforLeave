@@ -1,8 +1,10 @@
 import SwiftUI
 
 struct BrowserPageMenu: View {
+    @Environment(\.leafToolbarIconSize) private var toolbarIconSize
     let zoomPercent: Int
     let newTab: () -> Void
+    let newPrivateTab: () -> Void
     let find: () -> Void
     let zoomIn: () -> Void
     let zoomOut: () -> Void
@@ -16,11 +18,12 @@ struct BrowserPageMenu: View {
     let permissions: () -> Void
     let performance: () -> Void
     let equalizer: () -> Void
+    @State private var isHovered = false
 
     var body: some View {
         Menu {
             Button(action: newTab) { Label("New Tab", systemImage: "plus.square") }
-                .keyboardShortcut("t", modifiers: .command)
+            Button(action: newPrivateTab) { Label("New Private Tab", systemImage: "eye.slash.fill") }
             Button(action: find) { Label("Find in Page…", systemImage: "text.magnifyingglass") }
             Divider()
             Menu("Zoom — \(zoomPercent)%") {
@@ -46,14 +49,24 @@ struct BrowserPageMenu: View {
                 Label("Help & Feedback", systemImage: "questionmark.circle")
             }
         } label: {
-            Image(systemName: "ellipsis")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.primary)
-                .frame(width: BrowserChromeMetrics.controlSize, height: BrowserChromeMetrics.controlSize)
+            ZStack {
+                Color.clear
+                Image(systemName: "ellipsis")
+                    .font(.system(size: toolbarIconSize, weight: .semibold))
+                    .foregroundStyle(.primary)
+            }
+            .frame(width: BrowserChromeMetrics.controlSize, height: BrowserChromeMetrics.controlSize)
+            .contentShape(Rectangle())
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
-        .frame(width: BrowserChromeMetrics.controlSize)
+        .frame(width: BrowserChromeMetrics.controlSize, height: BrowserChromeMetrics.controlSize)
+        .contentShape(Rectangle())
+        .background(
+            isHovered ? LeafColors.chromeHover : Color.clear,
+            in: RoundedRectangle(cornerRadius: BrowserChromeMetrics.toolbarControlCornerRadius, style: .continuous)
+        )
+        .onHover { isHovered = $0 }
         .cursorHelp("Customize and control LeafOrLeave")
         .accessibilityLabel("LeafOrLeave menu")
     }

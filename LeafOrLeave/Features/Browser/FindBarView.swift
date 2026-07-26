@@ -18,7 +18,7 @@ struct FindBarView: View {
         }
         .buttonStyle(.plain).padding(.horizontal, 12).frame(height: 38)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-        .overlay { RoundedRectangle(cornerRadius: 11).strokeBorder(.white.opacity(0.12)) }
+        .overlay { RoundedRectangle(cornerRadius: 11).strokeBorder(Color.primary.opacity(0.12)).allowsHitTesting(false) }
         .shadow(color: .black.opacity(0.28), radius: 12, y: 5)
     }
 }
