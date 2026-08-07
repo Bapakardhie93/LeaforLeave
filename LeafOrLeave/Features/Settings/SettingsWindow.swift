@@ -16,16 +16,24 @@ struct SettingsWindow: View {
     @State private var confirmWebsiteData = false
     @State private var confirmSettingsReset = false
     @State private var settingsSearch = ""
+    @State private var hoveredSection: SettingsSection?
 
     var body: some View {
         HStack(spacing: 0) {
             settingsSidebar
-                .frame(width: 238)
-            Rectangle().fill(Color.primary.opacity(0.08)).frame(width: 1)
+                .frame(width: 252)
+            LinearGradient(
+                colors: [.clear, Color.primary.opacity(0.09), .clear],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(width: 1)
             settingsDetail
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background { settingsBackground }
         .leafAppearance(settings.value.appearance)
+        .tint(accentColor)
+        .environment(\.leafAccentColor, accentColor)
         .frame(minWidth: 960, idealWidth: 1120, minHeight: 680, idealHeight: 800)
         .alert("Clear all website data?", isPresented: $confirmWebsiteData) {
             Button("Cancel", role: .cancel) {}
@@ -50,20 +58,21 @@ struct SettingsWindow: View {
     }
 
     private var settingsSidebar: some View {
-        VStack(spacing: 14) {
-            HStack(spacing: 9) {
-                Image(systemName: "leaf.fill")
-                    .foregroundStyle(LeafColors.accent)
-                    .frame(width: 30, height: 30)
-                    .background(LeafColors.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: 9))
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Settings").font(.headline)
-                    Text("LeafOrLeave").font(.caption2).foregroundStyle(.secondary)
+        VStack(spacing: 0) {
+            HStack(spacing: 11) {
+                LeafApplicationIcon(size: 42)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("LeafOrLeave")
+                        .font(.system(size: 14.5, weight: .semibold, design: .rounded))
+                    Text("Settings")
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundStyle(.secondary)
                 }
                 Spacer()
             }
-            .padding(.horizontal, 14)
-            .padding(.top, 14)
+            .padding(.horizontal, 17)
+            .padding(.top, 17)
+            .padding(.bottom, 15)
 
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
@@ -78,40 +87,86 @@ struct SettingsWindow: View {
                 }
             }
             .padding(.horizontal, 11)
-            .frame(height: 36)
-            .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 10))
-            .overlay { RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.08)).allowsHitTesting(false) }
-            .padding(.horizontal, 12)
+            .frame(height: 37)
+            .background(Color.primary.opacity(0.05), in: Capsule())
+            .overlay { Capsule().strokeBorder(Color.primary.opacity(0.07)).allowsHitTesting(false) }
+            .padding(.horizontal, 14)
+            .padding(.bottom, 14)
 
             ScrollView {
-                LazyVStack(spacing: 5) {
+                LazyVStack(spacing: 4) {
                     ForEach(filteredSections) { item in
                         settingsSidebarRow(item)
                     }
                 }
-                .padding(.horizontal, 10)
+                .padding(.horizontal, 12)
                 .padding(.bottom, 16)
             }
         }
-        .background(Color.primary.opacity(0.03))
+        .background {
+            if settings.value.appearance.isLiquidGlass {
+                ZStack {
+                    Rectangle().fill(.ultraThinMaterial)
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.045), accentColor.opacity(0.025), .clear],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                }
+            } else {
+                Color.primary.opacity(0.03)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var settingsBackground: some View {
+        if settings.value.appearance.isLiquidGlass {
+            ZStack {
+                Rectangle().fill(.ultraThinMaterial)
+                LinearGradient(
+                    colors: [accentColor.opacity(0.12), .cyan.opacity(0.045), .clear],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                Circle()
+                    .fill(accentColor.opacity(0.10))
+                    .frame(width: 360, height: 360)
+                    .blur(radius: 110)
+                    .offset(x: 350, y: -300)
+                LinearGradient(
+                    colors: [Color.white.opacity(0.055), .clear, Color.black.opacity(0.035)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+        } else {
+            Color(nsColor: .windowBackgroundColor)
+        }
     }
 
     private var settingsDetail: some View {
         ZStack {
             LinearGradient(
-                colors: [LeafColors.accent.opacity(0.045), .clear],
+                colors: [accentColor.opacity(settings.value.appearance.isLiquidGlass ? 0.075 : 0.045), .clear],
                 startPoint: .topLeading,
                 endPoint: .center
             )
             .ignoresSafeArea()
 
             VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 11) {
+                HStack(spacing: 13) {
                     Image(systemName: icon(section))
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(LeafColors.accent)
-                        .frame(width: 40, height: 40)
-                        .background(LeafColors.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(accentColor)
+                        .frame(width: 19, height: 19)
+                        .frame(width: 44, height: 44)
+                        .background(accentColor.opacity(0.115), in: Circle())
+                        .overlay {
+                            Circle()
+                                .strokeBorder(accentColor.opacity(0.11))
+                                .allowsHitTesting(false)
+                        }
                     VStack(alignment: .leading, spacing: 3) {
                         Text(section.title)
                             .font(LeafTypography.navigationTitle)
@@ -122,8 +177,8 @@ struct SettingsWindow: View {
                 }
                 .frame(maxWidth: 840, alignment: .leading)
                 .padding(.horizontal, 34)
-                .padding(.top, 28)
-                .padding(.bottom, 20)
+                .padding(.top, 30)
+                .padding(.bottom, 24)
 
                 ScrollView {
                     detailContent
@@ -413,7 +468,7 @@ struct SettingsWindow: View {
                         if privateCount > 0 {
                             Text("\(privateCount) open")
                                 .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(LeafColors.accent)
+                                .foregroundStyle(accentColor)
                         }
                         Button("New Private Tab") { tabs.createPrivateTab() }
                     }
@@ -453,26 +508,56 @@ struct SettingsWindow: View {
 
     private func settingsSidebarRow(_ item: SettingsSection) -> some View {
         let selected = section == item
+        let hovered = hoveredSection == item
         return Button {
             withAnimation(.easeOut(duration: 0.16)) { section = item }
         } label: {
-            HStack(spacing: 10) {
-                Image(systemName: icon(item)).frame(width: 21)
-                Text(item.title).fontWeight(selected ? .semibold : .regular)
+            HStack(spacing: 11) {
+                Image(systemName: icon(item))
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .frame(width: 16, height: 16)
+                    .frame(width: 28, height: 28)
+                    .foregroundStyle(selected ? Color.white : hovered ? accentColor : Color.secondary)
+                    .background(
+                        selected
+                            ? Color.white.opacity(0.15)
+                            : Color.primary.opacity(hovered ? 0.055 : 0.025),
+                        in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    )
+                Text(item.title)
+                    .font(.system(size: 12.5, weight: selected ? .semibold : .medium))
                 Spacer()
                 if selected {
-                    Image(systemName: "chevron.right").font(.caption2).opacity(0.75)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 8.5, weight: .bold))
+                        .opacity(0.76)
                 }
             }
-            .padding(.horizontal, 11)
-            .frame(height: 39)
+            .padding(.leading, 7)
+            .padding(.trailing, 11)
+            .frame(height: 43)
             .foregroundStyle(selected ? Color.white : Color.primary.opacity(0.88))
             .background(
-                selected ? LeafColors.accent.opacity(0.82) : Color.primary.opacity(0.001),
-                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                LinearGradient(
+                    colors: selected
+                        ? [accentColor.opacity(0.92), accentColor.opacity(0.7)]
+                        : [Color.primary.opacity(hovered ? 0.052 : 0.001), .clear],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                in: RoundedRectangle(cornerRadius: 13, style: .continuous)
             )
+            .overlay {
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .strokeBorder(selected ? Color.white.opacity(0.13) : Color.clear)
+                    .allowsHitTesting(false)
+            }
         }
         .buttonStyle(.plain)
+        .shadow(color: selected ? accentColor.opacity(0.16) : .clear, radius: 9, y: 4)
+        .onHover { value in
+            withAnimation(.easeOut(duration: 0.13)) { hoveredSection = value ? item : nil }
+        }
         .help(item.title)
     }
 
@@ -482,6 +567,11 @@ struct SettingsWindow: View {
             $0.title.localizedCaseInsensitiveContains(settingsSearch) ||
             description(for: $0).localizedCaseInsensitiveContains(settingsSearch)
         }
+    }
+
+    private var accentColor: Color {
+        let workspaceAccent = workspaces.selectedWorkspace.map { $0.accentName ?? $0.accentToken }
+        return settings.value.resolvedAccentColor(workspaceAccent: workspaceAccent)
     }
 
     private var sectionDescription: String {

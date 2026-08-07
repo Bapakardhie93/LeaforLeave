@@ -3,6 +3,7 @@ import SwiftUI
 import WebKit
 
 struct WorkspaceSettingsPanel: View {
+    @Environment(\.leafAccentColor) private var accentColor
     @Bindable var workspaces: WorkspaceManager
     @State private var selectedID: UUID?
     @State private var showsCreateWorkspace = false
@@ -28,7 +29,7 @@ struct WorkspaceSettingsPanel: View {
                     Label("New Workspace", systemImage: "plus")
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(LeafColors.accent)
+                .tint(accentColor)
             }
 
             LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
@@ -209,6 +210,7 @@ struct WorkspaceSettingsPanel: View {
 
 private struct WorkspaceCreator: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.leafAccentColor) private var accentColor
     @State private var name = ""
     @State private var symbol = "square.grid.2x2"
     @State private var accent = "purple"
@@ -251,7 +253,7 @@ private struct WorkspaceCreator: View {
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(LeafColors.accent)
+                .tint(accentColor)
                 .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
@@ -261,6 +263,7 @@ private struct WorkspaceCreator: View {
 }
 
 struct PerformanceSettingsPanel: View {
+    @Environment(\.leafAccentColor) private var accentColor
     @Bindable var settings: SettingsStore
     @Bindable var suspension: TabSuspensionManager
 
@@ -403,7 +406,7 @@ struct PerformanceSettingsPanel: View {
 
     private func stateExplanation(_ title: String, _ detail: String, _ icon: String) -> some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: icon).foregroundStyle(LeafColors.accent).frame(width: 18)
+            Image(systemName: icon).foregroundStyle(accentColor).frame(width: 18)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.system(size: 12, weight: .semibold))
                 Text(detail).font(.system(size: 11)).foregroundStyle(.secondary)
@@ -422,13 +425,14 @@ private struct PerformanceSettingsConfiguration: Equatable {
 }
 
 struct AppearanceSettingsPanel: View {
+    @Environment(\.leafAccentColor) private var accentColor
     @Bindable var settings: SettingsStore
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             SettingsCard("Theme", subtitle: "Choose a foundation, then make the interface yours.") {
                 VStack(alignment: .leading, spacing: 16) {
-                    HStack(spacing: 12) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 112), spacing: 12)], spacing: 12) {
                         ForEach(LeafAppearance.allCases, id: \.self) { appearance in
                             themePreview(appearance)
                         }
@@ -612,21 +616,39 @@ struct AppearanceSettingsPanel: View {
     private func themePreview(_ appearance: LeafAppearance) -> some View {
         let selected = settings.value.appearance == appearance
         let dark = appearance == .dark || appearance == .graphiteDark
+        let glass = appearance == .liquidGlass
         return Button {
             settings.value.appearance = appearance
         } label: {
             VStack(alignment: .leading, spacing: 8) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 9)
-                        .fill(dark ? Color(nsColor: .darkGray) : .white)
+                        .fill(
+                            glass
+                                ? AnyShapeStyle(
+                                    LinearGradient(
+                                        colors: [activeAccentColor.opacity(0.22), .cyan.opacity(0.16), .white.opacity(0.5)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                : AnyShapeStyle(dark ? Color(nsColor: .darkGray) : .white)
+                        )
+                    if glass {
+                        Circle()
+                            .fill(.white.opacity(0.32))
+                            .frame(width: 30, height: 30)
+                            .blur(radius: 2)
+                            .offset(x: 30, y: -13)
+                    }
                     HStack(spacing: 5) {
                         RoundedRectangle(cornerRadius: 3)
-                            .fill(dark ? .black.opacity(0.35) : .gray.opacity(0.18))
+                            .fill(glass ? .white.opacity(0.34) : dark ? .black.opacity(0.35) : .gray.opacity(0.18))
                             .frame(width: 18)
                         VStack(spacing: 5) {
                             RoundedRectangle(cornerRadius: 3).fill(activeAccentColor).frame(height: 8)
                             RoundedRectangle(cornerRadius: 3)
-                                .fill(dark ? .white.opacity(0.12) : .black.opacity(0.08))
+                                .fill(glass ? .white.opacity(0.42) : dark ? .white.opacity(0.12) : .black.opacity(0.08))
                         }
                     }
                     .padding(9)
@@ -668,6 +690,7 @@ struct AppearanceSettingsPanel: View {
         case .light: "Light"
         case .dark: "Dark"
         case .graphiteDark: "Graphite"
+        case .liquidGlass: "Liquid Glass"
         }
     }
 
@@ -675,7 +698,7 @@ struct AppearanceSettingsPanel: View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 10)], spacing: 10) {
             ForEach(Array(items.enumerated()), id: \.offset) { _, item in
                 HStack {
-                    Image(systemName: item.0).foregroundStyle(LeafColors.accent).frame(width: 20)
+                    Image(systemName: item.0).foregroundStyle(accentColor).frame(width: 20)
                     Text(item.1).font(.system(size: 12, weight: .medium))
                     Spacer()
                     Toggle("", isOn: item.2).labelsHidden()
@@ -826,6 +849,7 @@ struct DeveloperSettingsPanel: View {
 }
 
 struct AdvancedSettingsPanel: View {
+    @Environment(\.leafAccentColor) private var accentColor
     @Bindable var settings: SettingsStore
     let tabs: TabManager
     let downloads: DownloadManager
@@ -850,9 +874,9 @@ struct AdvancedSettingsPanel: View {
                     HStack(spacing: 12) {
                         Image(systemName: passwordVault.isUnlocked ? "lock.open.fill" : "lock.fill")
                             .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(passwordVault.isUnlocked ? .green : LeafColors.accent)
+                            .foregroundStyle(passwordVault.isUnlocked ? .green : accentColor)
                             .frame(width: 38, height: 38)
-                            .background((passwordVault.isUnlocked ? Color.green : LeafColors.accent).opacity(0.12),
+                            .background((passwordVault.isUnlocked ? Color.green : accentColor).opacity(0.12),
                                         in: RoundedRectangle(cornerRadius: 10))
                         VStack(alignment: .leading, spacing: 3) {
                             Text(passwordVault.isUnlocked ? "Password Vault unlocked" : "Password Vault locked")
@@ -877,7 +901,7 @@ struct AdvancedSettingsPanel: View {
                                 Label("Unlock", systemImage: "touchid")
                             }
                             .buttonStyle(.borderedProminent)
-                            .tint(LeafColors.accent)
+                            .tint(accentColor)
                         }
                     }
                     .padding(14)
@@ -920,7 +944,7 @@ struct AdvancedSettingsPanel: View {
                             ForEach(passwordVault.credentials) { credential in
                                 HStack(spacing: 12) {
                                     Image(systemName: "globe")
-                                        .foregroundStyle(LeafColors.accent)
+                                        .foregroundStyle(accentColor)
                                         .frame(width: 30, height: 30)
                                         .background(Color.primary.opacity(0.05),
                                                     in: RoundedRectangle(cornerRadius: 8))
@@ -1112,6 +1136,7 @@ struct AdvancedSettingsPanel: View {
 
 private struct CredentialEditor: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.leafAccentColor) private var accentColor
     @State private var host: String
     @State private var username: String
     @State private var password: String
@@ -1133,9 +1158,9 @@ private struct CredentialEditor: View {
             HStack(spacing: 12) {
                 Image(systemName: "key.fill")
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(LeafColors.accent)
+                    .foregroundStyle(accentColor)
                     .frame(width: 42, height: 42)
-                    .background(LeafColors.accent.opacity(0.13), in: RoundedRectangle(cornerRadius: 12))
+                    .background(accentColor.opacity(0.13), in: RoundedRectangle(cornerRadius: 12))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(id == nil ? "Add Password" : "Update Password")
                         .font(.title2.weight(.semibold))
@@ -1178,7 +1203,7 @@ private struct CredentialEditor: View {
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(LeafColors.accent)
+                .tint(accentColor)
                 .disabled(host.trimmingCharacters(in: .whitespaces).isEmpty ||
                           username.trimmingCharacters(in: .whitespaces).isEmpty ||
                           password.isEmpty)

@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct DownloadToastView: View {
+    @Environment(\.leafAccentColor) private var accentColor
     let record: DownloadRecord
     let openDownloads: () -> Void
     let dismiss: () -> Void
@@ -30,7 +31,7 @@ struct DownloadToastView: View {
 
             if record.status == .downloading {
                 HStack(spacing: 9) {
-                    ProgressView(value: record.progress).tint(LeafColors.accent)
+                    ProgressView(value: record.progress).tint(accentColor)
                     Text("\(Int(record.progress * 100))%")
                         .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                         .frame(width: 34, alignment: .trailing)
@@ -42,7 +43,7 @@ struct DownloadToastView: View {
             Button("Show Downloads", action: openDownloads)
                 .buttonStyle(.plain)
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(LeafColors.accent)
+                .foregroundStyle(accentColor)
         }
         .padding(14)
         .frame(width: 320)
@@ -75,7 +76,7 @@ struct DownloadToastView: View {
 
     private var color: Color {
         switch record.status {
-        case .queued, .downloading: LeafColors.accent
+        case .queued, .downloading: accentColor
         case .paused: .orange
         case .completed: LeafColors.secure
         case .failed: .red

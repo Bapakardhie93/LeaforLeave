@@ -7,17 +7,20 @@ struct LibraryEntry: Identifiable, Codable, Equatable {
     let url: URL
     var date: Date
     var visitCount: Int
+    var workspaceName: String?
 
-    init(id: UUID, title: String, url: URL, date: Date, visitCount: Int = 1) {
+    init(id: UUID, title: String, url: URL, date: Date, visitCount: Int = 1,
+         workspaceName: String? = nil) {
         self.id = id
         self.title = title
         self.url = url
         self.date = date
         self.visitCount = max(visitCount, 1)
+        self.workspaceName = workspaceName
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, title, url, date, visitCount
+        case id, title, url, date, visitCount, workspaceName
     }
 
     init(from decoder: Decoder) throws {
@@ -27,6 +30,7 @@ struct LibraryEntry: Identifiable, Codable, Equatable {
         url = try values.decode(URL.self, forKey: .url)
         date = try values.decode(Date.self, forKey: .date)
         visitCount = max(try values.decodeIfPresent(Int.self, forKey: .visitCount) ?? 1, 1)
+        workspaceName = try values.decodeIfPresent(String.self, forKey: .workspaceName)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -36,6 +40,7 @@ struct LibraryEntry: Identifiable, Codable, Equatable {
         try values.encode(url, forKey: .url)
         try values.encode(date, forKey: .date)
         try values.encode(visitCount, forKey: .visitCount)
+        try values.encodeIfPresent(workspaceName, forKey: .workspaceName)
     }
 }
 
@@ -44,14 +49,17 @@ struct LibraryEntry: Identifiable, Codable, Equatable {
 final class LibraryManager {
     private(set) var bookmarks: [LibraryEntry] = []
     private(set) var history: [LibraryEntry] = []
+    private(set) var archivedTabs: [LibraryEntry] = []
     private let defaults: UserDefaults
     private let bookmarksKey = "library.bookmarks.v1"
     private let historyKey = "library.history.v1"
+    private let archiveKey = "library.archive.v1"
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         bookmarks = Self.load(bookmarksKey, from: defaults)
         history = Self.load(historyKey, from: defaults)
+        archivedTabs = Self.load(archiveKey, from: defaults)
     }
 
     func isBookmarked(_ url: URL?) -> Bool {
@@ -108,6 +116,44 @@ final class LibraryManager {
     func removeBookmark(_ id: UUID) { bookmarks.removeAll { $0.id == id }; save(bookmarks, key: bookmarksKey) }
     func removeHistory(_ id: UUID) { history.removeAll { $0.id == id }; save(history, key: historyKey) }
     func clearHistory() { history.removeAll(); save(history, key: historyKey) }
+
+    @discardableResult
+    func archive(title: String, url: URL?, workspaceName: String?, at now: Date = .now) -> LibraryEntry? {
+        guard let url, isWebURL(url) else { return nil }
+        let normalizedWorkspace = workspaceName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let entry = LibraryEntry(
+            id: UUID(),
+            title: cleanTitle(title, url: url),
+            url: url,
+            date: now,
+            workspaceName: normalizedWorkspace?.isEmpty == false ? normalizedWorkspace : nil
+        )
+        archivedTabs.removeAll { $0.url == url }
+        archivedTabs.insert(entry, at: 0)
+        if archivedTabs.count > 1_000 {
+            archivedTabs.removeLast(archivedTabs.count - 1_000)
+        }
+        save(archivedTabs, key: archiveKey)
+        return entry
+    }
+
+    func removeArchivedTab(_ id: UUID) {
+        archivedTabs.removeAll { $0.id == id }
+        save(archivedTabs, key: archiveKey)
+    }
+
+    func clearArchive() {
+        archivedTabs.removeAll()
+        save(archivedTabs, key: archiveKey)
+    }
+
+    func restoreCollections(bookmarks importedBookmarks: [LibraryEntry],
+                            archivedTabs importedArchive: [LibraryEntry]) {
+        bookmarks = Array(importedBookmarks.filter { isWebURL($0.url) }.prefix(5_000))
+        archivedTabs = Array(importedArchive.filter { isWebURL($0.url) }.prefix(1_000))
+        save(bookmarks, key: bookmarksKey)
+        save(archivedTabs, key: archiveKey)
+    }
 
     private func isWebURL(_ url: URL) -> Bool { url.scheme == "http" || url.scheme == "https" }
     private func cleanTitle(_ title: String, url: URL) -> String {

@@ -4,28 +4,57 @@ import SwiftUI
 struct DownloadsListView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.leafAccentColor) private var accentColor
+    @Environment(\.leafAppearance) private var appearance
     let manager: DownloadManager
 
     @State private var search = ""
     @State private var filter = DownloadListFilter.all
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            overview
-            controls
-            content
+        ZStack {
+            panelBackground
+
+            VStack(spacing: 0) {
+                header
+                overview
+                controls
+                content
+            }
         }
-        .frame(minWidth: 680, idealWidth: 760, minHeight: 500, idealHeight: 610)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .frame(minWidth: 720, idealWidth: 820, minHeight: 540, idealHeight: 660)
         .animation(.snappy(duration: 0.22), value: filter)
         .animation(.snappy(duration: 0.22), value: manager.records.count)
+    }
+
+    @ViewBuilder
+    private var panelBackground: some View {
+        if appearance.isLiquidGlass {
+            ZStack {
+                Rectangle().fill(.ultraThinMaterial)
+                Color(nsColor: .windowBackgroundColor).opacity(0.20)
+                RadialGradient(
+                    colors: [accentColor.opacity(0.09), .clear],
+                    center: .topLeading,
+                    startRadius: 10,
+                    endRadius: 460
+                )
+            }
+        } else {
+            ZStack {
+                Color(nsColor: .windowBackgroundColor)
+                LinearGradient(
+                    colors: [accentColor.opacity(0.045), .clear],
+                    startPoint: .topLeading,
+                    endPoint: .center
+                )
+            }
+        }
     }
 
     private var header: some View {
         HStack(spacing: 12) {
             ZStack {
-                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                Circle()
                     .fill(
                         LinearGradient(
                             colors: [accentColor, accentColor.opacity(0.72)],
@@ -37,8 +66,8 @@ struct DownloadsListView: View {
                     .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(.white)
             }
-            .frame(width: 38, height: 38)
-            .shadow(color: accentColor.opacity(0.2), radius: 8, y: 3)
+            .frame(width: 42, height: 42)
+            .shadow(color: accentColor.opacity(0.24), radius: 12, y: 5)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text("Downloads")
@@ -83,20 +112,13 @@ struct DownloadsListView: View {
             .help("Close Downloads")
             .accessibilityLabel("Close Downloads")
         }
-        .padding(.horizontal, 22)
-        .padding(.top, 18)
-        .padding(.bottom, 15)
-        .background {
-            LinearGradient(
-                colors: [accentColor.opacity(0.065), .clear],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        }
+        .padding(.horizontal, 26)
+        .padding(.top, 22)
+        .padding(.bottom, 18)
     }
 
     private var overview: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 10) {
             DownloadSummaryItem(
                 title: "Active",
                 value: "\(activeCount)",
@@ -104,7 +126,6 @@ struct DownloadsListView: View {
                 icon: "arrow.down.circle.fill",
                 color: accentColor
             )
-            summaryDivider
             DownloadSummaryItem(
                 title: "Completed",
                 value: "\(completedCount)",
@@ -112,7 +133,6 @@ struct DownloadsListView: View {
                 icon: "checkmark.circle.fill",
                 color: LeafColors.secure
             )
-            summaryDivider
             DownloadSummaryItem(
                 title: "Downloaded",
                 value: downloadedSize,
@@ -121,21 +141,8 @@ struct DownloadsListView: View {
                 color: .orange
             )
         }
-        .padding(.vertical, 11)
-        .background(Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.055))
-                .allowsHitTesting(false)
-        }
-        .padding(.horizontal, 22)
-        .padding(.bottom, 15)
-    }
-
-    private var summaryDivider: some View {
-        Rectangle()
-            .fill(Color.primary.opacity(0.07))
-            .frame(width: 1, height: 34)
+        .padding(.horizontal, 26)
+        .padding(.bottom, 18)
     }
 
     private var controls: some View {
@@ -156,11 +163,11 @@ struct DownloadsListView: View {
                 }
             }
             .padding(.horizontal, 11)
-            .frame(maxWidth: 260)
-            .frame(height: 34)
-            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 9))
+            .frame(maxWidth: 280)
+            .frame(height: 36)
+            .background(Color.primary.opacity(appearance.isLiquidGlass ? 0.075 : 0.04), in: Capsule())
             .overlay {
-                RoundedRectangle(cornerRadius: 9)
+                Capsule()
                     .strokeBorder(Color.primary.opacity(0.065))
                     .allowsHitTesting(false)
             }
@@ -173,10 +180,10 @@ struct DownloadsListView: View {
                 }
             }
             .padding(3)
-            .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 9))
+            .background(Color.primary.opacity(appearance.isLiquidGlass ? 0.075 : 0.035), in: Capsule())
         }
-        .padding(.horizontal, 22)
-        .padding(.bottom, 12)
+        .padding(.horizontal, 26)
+        .padding(.bottom, 16)
     }
 
     @ViewBuilder
@@ -192,36 +199,35 @@ struct DownloadsListView: View {
 
     private var downloadList: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 16) {
+            LazyVStack(alignment: .leading, spacing: 21) {
                 ForEach(groupedRecords) { group in
-                    VStack(alignment: .leading, spacing: 7) {
-                        Text(group.title.uppercased())
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(.tertiary)
-                            .tracking(0.75)
-                            .padding(.leading, 4)
+                    VStack(alignment: .leading, spacing: 9) {
+                        HStack(spacing: 10) {
+                            Text(group.title)
+                                .font(.system(size: 11.5, weight: .semibold, design: .rounded))
+                                .foregroundStyle(.secondary)
+                            Rectangle()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [Color.primary.opacity(0.09), .clear],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .frame(height: 1)
+                        }
+                        .padding(.horizontal, 3)
 
-                        VStack(spacing: 0) {
+                        VStack(spacing: 8) {
                             ForEach(group.records) { item in
                                 ModernDownloadRow(item: item, manager: manager)
-                                if item.id != group.records.last?.id {
-                                    Divider()
-                                        .padding(.leading, 66)
-                                }
                             }
                         }
-                        .background(Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 15, style: .continuous)
-                                .strokeBorder(Color.primary.opacity(0.055))
-                                .allowsHitTesting(false)
-                        }
-                        .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
                     }
                 }
             }
-            .padding(.horizontal, 22)
-            .padding(.bottom, 22)
+            .padding(.horizontal, 26)
+            .padding(.bottom, 26)
         }
         .scrollIndicators(.automatic)
     }
@@ -356,6 +362,7 @@ private struct DownloadDateGroup: Identifiable {
 }
 
 private struct DownloadSummaryItem: View {
+    @Environment(\.leafAppearance) private var appearance
     let title: String
     let value: String
     let detail: String
@@ -384,13 +391,28 @@ private struct DownloadSummaryItem: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 13)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
         .frame(maxWidth: .infinity)
+        .background {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(
+                    appearance.isLiquidGlass
+                        ? AnyShapeStyle(.thinMaterial)
+                        : AnyShapeStyle(Color.primary.opacity(0.032))
+                )
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.06))
+                .allowsHitTesting(false)
+        }
     }
 }
 
 private struct ModernDownloadRow: View {
     @Environment(\.leafAccentColor) private var accentColor
+    @Environment(\.leafAppearance) private var appearance
     let item: DownloadRecord
     let manager: DownloadManager
     @State private var hovered = false
@@ -426,10 +448,24 @@ private struct ModernDownloadRow: View {
                 actions
             }
         }
-        .padding(.horizontal, 13)
-        .padding(.vertical, 10)
-        .background(Color.primary.opacity(hovered ? 0.045 : 0))
-        .contentShape(Rectangle())
+        .padding(.horizontal, 15)
+        .padding(.vertical, 12)
+        .background {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(
+                    appearance.isLiquidGlass
+                        ? AnyShapeStyle(.thinMaterial)
+                        : AnyShapeStyle(Color.primary.opacity(hovered ? 0.055 : 0.028))
+                )
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(Color.primary.opacity(hovered ? 0.12 : 0.06))
+                .allowsHitTesting(false)
+        }
+        .shadow(color: .black.opacity(hovered ? 0.09 : 0.025), radius: hovered ? 12 : 5, y: hovered ? 5 : 2)
+        .scaleEffect(hovered ? 1.003 : 1)
+        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .onHover { value in
             withAnimation(.easeOut(duration: 0.14)) { hovered = value }
         }
@@ -457,8 +493,8 @@ private struct ModernDownloadRow: View {
             Image(systemName: fileSymbol)
                 .font(.system(size: 17, weight: .medium))
                 .foregroundStyle(statusColor)
-                .frame(width: 40, height: 40)
-                .background(statusColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .frame(width: 42, height: 42)
+                .background(statusColor.opacity(0.11), in: Circle())
 
             Image(systemName: statusSymbol)
                 .font(.system(size: 7, weight: .bold))
@@ -468,7 +504,7 @@ private struct ModernDownloadRow: View {
                 .overlay { Circle().strokeBorder(Color(nsColor: .windowBackgroundColor), lineWidth: 1.5) }
                 .offset(x: 2, y: 2)
         }
-        .frame(width: 42, height: 42)
+        .frame(width: 44, height: 44)
     }
 
     private var statusLabel: some View {

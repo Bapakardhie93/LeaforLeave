@@ -6,6 +6,7 @@ struct BrowserToolbarButton: View {
     let helpText: String
     var isEnabled = true
     var drawsBackground = false
+    var iconScale: CGFloat = 1
     let action: () -> Void
     @State private var isHovered = false
 
@@ -14,7 +15,8 @@ struct BrowserToolbarButton: View {
             ZStack {
                 Color.clear
                 Image(systemName: systemName)
-                    .font(.system(size: toolbarIconSize, weight: .medium))
+                    .font(.system(size: toolbarIconSize * iconScale, weight: .semibold))
+                    .frame(width: 18, height: 18)
             }
             .frame(width: BrowserChromeMetrics.controlSize, height: BrowserChromeMetrics.controlSize)
             .contentShape(Rectangle())

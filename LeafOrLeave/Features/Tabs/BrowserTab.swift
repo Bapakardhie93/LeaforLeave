@@ -100,7 +100,6 @@ final class BrowserTab: NSObject, Identifiable, WKNavigationDelegate, WKUIDelega
         webView.uiDelegate = self
         webView.configuration.userContentController.add(self, name: MediaScriptProvider.name)
         webView.configuration.userContentController.addUserScript(MediaScriptProvider.script)
-        webView.configuration.userContentController.addUserScript(EqualizerScriptProvider.script)
         webView.configuration.userContentController.add(self, name: DeveloperConsoleScriptProvider.name)
         webView.configuration.userContentController.addUserScript(DeveloperConsoleScriptProvider.script)
         webView.configuration.userContentController.add(self, name: PasswordScriptProvider.name)
@@ -425,8 +424,8 @@ final class BrowserTab: NSObject, Identifiable, WKNavigationDelegate, WKUIDelega
                  for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
         guard navigationAction.targetFrame == nil else { return nil }
         return manager?.handlePopup(
-            request: navigationAction.request,
             configuration: configuration,
+            sourceTabID: id,
             isPrivate: isPrivate
         )
     }

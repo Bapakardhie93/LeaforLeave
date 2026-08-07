@@ -3,6 +3,8 @@ import SwiftUI
 struct NetworkStatusButton: View {
     @Environment(\.leafToolbarIconSize) private var toolbarIconSize
     let network: NetworkMonitor
+    var surfaceColor: Color = LeafColors.chromeSurface
+    var cornerRadius: CGFloat = 9
     @State private var isHovered = false
 
     var body: some View {
@@ -17,10 +19,10 @@ struct NetworkStatusButton: View {
             .padding(.horizontal, 9)
             .frame(height: BrowserChromeMetrics.controlSize)
             .contentShape(Rectangle())
-            .background(isHovered ? LeafColors.chromeHover : LeafColors.chromeSurface,
-                        in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .background(isHovered ? LeafColors.chromeHover : surfaceColor,
+                        in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .strokeBorder(Color.primary.opacity(0.055))
                     .allowsHitTesting(false)
             }

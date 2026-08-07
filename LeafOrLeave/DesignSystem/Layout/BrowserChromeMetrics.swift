@@ -5,7 +5,7 @@ enum BrowserChromeMetrics {
     static let tabBarHeight: CGFloat = 40
     static let controlSize: CGFloat = 32
     static let compactControlSize: CGFloat = 28
-    static let toolbarIconSize: CGFloat = 13
+    static let toolbarIconSize: CGFloat = 13.5
     static let toolbarControlCornerRadius: CGFloat = 8
     static let trafficLightReserve: CGFloat = 68
     static let omniboxHeight: CGFloat = 34

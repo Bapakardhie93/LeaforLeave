@@ -115,6 +115,18 @@ struct TabBarView: View {
                                 .id(tab.id)
                                 .transition(tabTransition)
                                 .contextMenu {
+                                    Button("Keep This Tab", systemImage: "pin.fill") {
+                                        manager.keepTab(id: tab.id)
+                                    }
+                                    .disabled(tab.isPinned)
+                                    Button("Archive and Close", systemImage: "archivebox") {
+                                        _ = manager.archiveTab(id: tab.id)
+                                    }
+                                    .disabled(tab.isPrivate || tab.isExamProtected || tab.url == nil)
+                                    Button("Leave (Close)", systemImage: "xmark") {
+                                        manager.leaveTab(id: tab.id)
+                                    }
+                                    Divider()
                                     Button("Open in Split") { openInSplit(tab.id) }
                                         .disabled(window.visibleTabIDs.contains(tab.id) || !window.canAddSplit)
                                     Button("Move Tab to New Window") { detachTab(tab.id) }
@@ -129,7 +141,6 @@ struct TabBarView: View {
                                     Divider()
                                     Button("Close Other Tabs") { manager.closeOtherTabs(keeping: tab.id) }
                                     Button("Close Tabs to the Right") { manager.closeTabsToRight(of: tab.id) }
-                                    Button("Close Tab") { manager.closeTab(id: tab.id) }
                                 }
                                 .onDrag {
                                     manager.beginDragging(tabID: tab.id, from: window.id)
@@ -334,6 +345,18 @@ struct VerticalTabBarView: View {
                             )
                             .id(tab.id)
                             .contextMenu {
+                                Button("Keep This Tab", systemImage: "pin.fill") {
+                                    manager.keepTab(id: tab.id)
+                                }
+                                .disabled(tab.isPinned)
+                                Button("Archive and Close", systemImage: "archivebox") {
+                                    _ = manager.archiveTab(id: tab.id)
+                                }
+                                .disabled(tab.isPrivate || tab.isExamProtected || tab.url == nil)
+                                Button("Leave (Close)", systemImage: "xmark") {
+                                    manager.leaveTab(id: tab.id)
+                                }
+                                Divider()
                                 Button("Open in Split") { openInSplit(tab.id) }
                                     .disabled(window.visibleTabIDs.contains(tab.id) || !window.canAddSplit)
                                 Button("Move Tab to New Window") { detachTab(tab.id) }
@@ -345,7 +368,6 @@ struct VerticalTabBarView: View {
                                 Button("Move Down") { manager.moveTab(id: tab.id, by: 1, in: window.id) }
                                 Divider()
                                 Button("Close Other Tabs") { manager.closeOtherTabs(keeping: tab.id) }
-                                Button("Close Tab") { manager.closeTab(id: tab.id) }
                             }
                             .onDrag {
                                 manager.beginDragging(tabID: tab.id, from: window.id)

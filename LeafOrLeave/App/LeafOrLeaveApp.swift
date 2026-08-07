@@ -66,6 +66,22 @@ private struct BrowserCommands: Commands {
         CommandGroup(after: .saveItem) {
             Button("Open File…") { environment.tabManager.openLocalFile() }
                 .keyboardShortcut("o", modifiers: .command)
+            Divider()
+            Button("Export Browser Data…") {
+                BrowserDataBackupService.exportUsingPanel(
+                    settings: environment.settings,
+                    library: environment.libraryManager,
+                    workspaces: environment.workspaceManager
+                )
+            }
+            Button("Import Browser Data…") {
+                BrowserDataBackupService.importUsingPanel(
+                    settings: environment.settings,
+                    library: environment.libraryManager,
+                    workspaces: environment.workspaceManager
+                )
+            }
+            Divider()
             Button("Close Tab") { environment.tabManager.closeSelectedTab() }
                 .keyboardShortcut(shortcut(.closeTab).keyEquivalent,
                                   modifiers: shortcut(.closeTab).modifiers.eventModifiers)
@@ -74,6 +90,17 @@ private struct BrowserCommands: Commands {
         }
 
         CommandMenu("Tabs") {
+            Button("Keep Current Tab") {
+                if let id = environment.tabManager.selectedTabID {
+                    environment.tabManager.keepTab(id: id)
+                }
+            }
+            Button("Archive Current Tab") {
+                if let id = environment.tabManager.selectedTabID {
+                    _ = environment.tabManager.archiveTab(id: id)
+                }
+            }
+            Divider()
             Button("Next Tab") { environment.tabManager.selectRelative(1) }
                 .keyboardShortcut(.tab, modifiers: .control)
             Button("Previous Tab") { environment.tabManager.selectRelative(-1) }

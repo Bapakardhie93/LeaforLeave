@@ -1,5 +1,17 @@
 import SwiftUI
 
+private enum SidebarMetrics {
+    static let contentInset: CGFloat = 16
+    static let headerHorizontalInset: CGFloat = 23
+    static let headerTopInset: CGFloat = 36
+    static let sectionSpacing: CGFloat = 19
+    static let sectionHeaderHeight: CGFloat = 22
+    static let rowHeight: CGFloat = 43
+    static let rowIconSize: CGFloat = 30
+    static let rowLeadingInset: CGFloat = 6
+    static let rowLabelSpacing: CGFloat = 10
+}
+
 struct BrowserSidebarView: View {
     @Environment(\.leafAccentColor) private var accentColor
     let workspaces: WorkspaceManager
@@ -10,11 +22,14 @@ struct BrowserSidebarView: View {
     let newPrivateTab: () -> Void
     let showBookmarks: () -> Void
     let showHistory: () -> Void
+    let showArchive: () -> Void
     let showDownloads: () -> Void
+    var archiveCount = 0
     let collapse: () -> Void
     @State private var newName = ""
     @State private var addingWorkspace = false
     @State private var hoveredWorkspaceID: UUID?
+    @State private var privateHovered = false
 
     var body: some View {
         ZStack {
@@ -22,13 +37,14 @@ struct BrowserSidebarView: View {
             VStack(spacing: 0) {
                 header
                 ScrollView(showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 17) {
+                    VStack(alignment: .leading, spacing: SidebarMetrics.sectionSpacing) {
                         workspaceSection
                         privateBrowsingCard
                         librarySection
                     }
-                    .padding(.horizontal, 11)
-                    .padding(.bottom, 18)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, SidebarMetrics.contentInset)
+                    .padding(.bottom, 20)
                 }
                 footer
             }
@@ -42,60 +58,74 @@ struct BrowserSidebarView: View {
         ZStack {
             Rectangle().fill(.ultraThinMaterial)
             LinearGradient(
-                colors: [accentColor.opacity(0.075), .clear, Color.primary.opacity(0.025)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
+                stops: [
+                    .init(color: accentColor.opacity(0.11), location: 0),
+                    .init(color: accentColor.opacity(0.025), location: 0.34),
+                    .init(color: Color.primary.opacity(0.018), location: 1)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
             )
             Circle()
-                .fill(accentColor.opacity(0.075))
-                .frame(width: 190, height: 190)
+                .fill(accentColor.opacity(0.12))
+                .frame(width: 210, height: 210)
+                .blur(radius: 64)
+                .offset(x: -112, y: -285)
+            Circle()
+                .fill(Color.blue.opacity(0.045))
+                .frame(width: 170, height: 170)
+                .blur(radius: 60)
+                .offset(x: 118, y: 90)
+            Ellipse()
+                .fill(accentColor.opacity(0.035))
+                .frame(width: 310, height: 120)
                 .blur(radius: 52)
-                .offset(x: -90, y: -260)
+                .rotationEffect(.degrees(-22))
+                .offset(x: 30, y: 245)
         }
         .allowsHitTesting(false)
     }
 
     private var header: some View {
         HStack(spacing: 11) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(LinearGradient(colors: [accentColor, accentColor.opacity(0.7)],
-                                         startPoint: .topLeading, endPoint: .bottomTrailing))
-                Image(systemName: "leaf.fill")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(.white)
-            }
-            .frame(width: 34, height: 34)
-            .shadow(color: accentColor.opacity(0.24), radius: 8, y: 3)
+            LeafApplicationIcon(size: 38)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text("LeafOrLeave")
-                    .font(.system(size: 13.5, weight: .semibold, design: .rounded))
-                Text(selectedWorkspace?.name ?? "Browser")
-                    .font(.system(size: 10.5, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(selectedWorkspace.map { workspaceColor($0.accentName ?? $0.accentToken) }
+                              ?? accentColor)
+                        .frame(width: 5, height: 5)
+                    Text(selectedWorkspace?.name ?? "Browser")
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
             Spacer(minLength: 4)
             Button(action: collapse) {
                 Image(systemName: "sidebar.left")
-                    .font(.system(size: 11, weight: .semibold))
-                    .frame(width: 30, height: 30)
+                    .font(.system(size: 13, weight: .semibold))
+                    .frame(width: 32, height: 32)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
-            .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 9))
+            .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 9).strokeBorder(Color.primary.opacity(0.055))
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.06))
                     .allowsHitTesting(false)
             }
             .cursorHelp("Hide Sidebar")
             .accessibilityLabel("Hide Sidebar")
         }
-        .padding(.horizontal, 13)
-        .padding(.top, 31)
-        .padding(.bottom, 15)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, SidebarMetrics.headerHorizontalInset)
+        .padding(.top, SidebarMetrics.headerTopInset)
+        .padding(.bottom, 19)
     }
 
     private var workspaceSection: some View {
@@ -108,16 +138,16 @@ struct BrowserSidebarView: View {
                 } label: {
                     Image(systemName: addingWorkspace ? "xmark" : "plus")
                         .font(.system(size: 10, weight: .bold))
-                        .frame(width: 24, height: 24)
+                        .frame(width: 25, height: 25)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(addingWorkspace ? Color.secondary : accentColor)
                 .background(Color.primary.opacity(0.045), in: Circle())
                 .accessibilityLabel(addingWorkspace ? "Cancel new workspace" : "New workspace")
             }
 
-            VStack(spacing: 5) {
+            VStack(spacing: 2) {
                 ForEach(workspaces.workspaces) { workspace in
                     workspaceRow(workspace)
                 }
@@ -141,19 +171,17 @@ struct BrowserSidebarView: View {
                         .disabled(newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                     .padding(.horizontal, 10)
-                    .frame(height: 40)
-                    .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 11))
+                    .frame(height: 43)
+                    .background(.thinMaterial, in: Capsule())
+                    .overlay {
+                        Capsule()
+                            .strokeBorder(accentColor.opacity(0.13))
+                    }
                     .transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
-            .padding(5)
-            .background(Color.primary.opacity(0.026), in: RoundedRectangle(cornerRadius: 15))
-            .overlay {
-                RoundedRectangle(cornerRadius: 15)
-                    .strokeBorder(Color.primary.opacity(0.052))
-                    .allowsHitTesting(false)
-            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func workspaceRow(_ workspace: BrowserWorkspace) -> some View {
@@ -163,13 +191,13 @@ struct BrowserSidebarView: View {
         return Button {
             withAnimation(.easeOut(duration: 0.18)) { select(workspace.id) }
         } label: {
-            HStack(spacing: 10) {
+            HStack(spacing: SidebarMetrics.rowLabelSpacing) {
                 Image(systemName: workspace.symbolName)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: 12.5, weight: .semibold))
                     .foregroundStyle(selected ? Color.white : color)
-                    .frame(width: 29, height: 29)
-                    .background(selected ? color : color.opacity(0.13),
-                                in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .frame(width: SidebarMetrics.rowIconSize, height: SidebarMetrics.rowIconSize)
+                    .background(selected ? Color.white.opacity(0.14) : color.opacity(0.12),
+                                in: Circle())
                 Text(workspace.name)
                     .font(.system(size: 12.5, weight: selected ? .semibold : .medium))
                     .lineLimit(1)
@@ -178,27 +206,34 @@ struct BrowserSidebarView: View {
                     .font(.system(size: 9.5, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(selected ? color : Color.secondary)
-                    .frame(minWidth: 21, minHeight: 21)
-                    .background(selected ? Color.white.opacity(0.92) : Color.primary.opacity(0.06), in: Capsule())
+                    .frame(minWidth: 22, minHeight: 22)
+                    .background(selected ? Color.white.opacity(0.94) : Color.clear, in: Circle())
             }
-            .padding(.horizontal, 8)
-            .frame(height: 43)
-            .contentShape(RoundedRectangle(cornerRadius: 11))
+            .padding(.leading, SidebarMetrics.rowLeadingInset)
+            .padding(.trailing, 9)
+            .frame(maxWidth: .infinity)
+            .frame(height: SidebarMetrics.rowHeight)
+            .contentShape(Capsule())
             .background(
                 LinearGradient(
                     colors: selected
                         ? [color.opacity(0.88), color.opacity(0.64)]
-                        : [Color.primary.opacity(hovered ? 0.065 : 0.012),
-                           Color.primary.opacity(hovered ? 0.035 : 0.008)],
-                    startPoint: .leading,
-                    endPoint: .trailing
+                        : [Color.primary.opacity(hovered ? 0.065 : 0),
+                           Color.primary.opacity(hovered ? 0.025 : 0)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
                 ),
-                in: RoundedRectangle(cornerRadius: 11, style: .continuous)
+                in: Capsule()
             )
+            .overlay {
+                Capsule()
+                    .strokeBorder(selected ? Color.white.opacity(0.14) : Color.clear)
+                    .allowsHitTesting(false)
+            }
             .foregroundStyle(selected ? Color.white : Color.primary)
         }
         .buttonStyle(.plain)
-        .shadow(color: selected ? color.opacity(0.18) : .clear, radius: 7, y: 2)
+        .shadow(color: selected ? color.opacity(0.18) : .clear, radius: 10, y: 4)
         .onHover { value in
             withAnimation(.easeOut(duration: 0.13)) { hoveredWorkspaceID = value ? workspace.id : nil }
         }
@@ -214,80 +249,97 @@ struct BrowserSidebarView: View {
 
     private var privateBrowsingCard: some View {
         Button(action: newPrivateTab) {
-            HStack(spacing: 11) {
+            HStack(spacing: 8) {
                 Image(systemName: "eye.slash.fill")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white)
-                    .frame(width: 34, height: 34)
+                    .frame(width: 32, height: 32)
                     .background(
                         LinearGradient(colors: [accentColor, accentColor.opacity(0.68)],
                                        startPoint: .topLeading, endPoint: .bottomTrailing),
-                        in: RoundedRectangle(cornerRadius: 10)
+                        in: Circle()
                     )
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Private Tab").font(.system(size: 12.5, weight: .semibold))
-                    Text("No history or persistent site data")
-                        .font(.system(size: 9.5))
+                    Text("Browse privately").font(.system(size: 12.5, weight: .semibold))
+                    Text("Leave no history behind")
+                        .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
                 Spacer()
-                Image(systemName: "plus")
-                    .font(.system(size: 10, weight: .bold))
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 9.5, weight: .bold))
                     .foregroundStyle(accentColor)
+                    .frame(width: 25, height: 25)
             }
-            .padding(10)
-            .background(accentColor.opacity(0.075), in: RoundedRectangle(cornerRadius: 14))
+            .padding(.leading, SidebarMetrics.rowLeadingInset)
+            .padding(.trailing, 10)
+            .frame(maxWidth: .infinity)
+            .frame(height: 53)
+            .background(
+                LinearGradient(colors: [accentColor.opacity(privateHovered ? 0.18 : 0.13),
+                                        accentColor.opacity(privateHovered ? 0.07 : 0.035)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing),
+                in: Capsule()
+            )
             .overlay {
-                RoundedRectangle(cornerRadius: 14)
-                    .strokeBorder(accentColor.opacity(0.17))
+                Capsule()
+                    .strokeBorder(accentColor.opacity(privateHovered ? 0.28 : 0.16))
                     .allowsHitTesting(false)
             }
         }
         .buttonStyle(.plain)
+        .scaleEffect(privateHovered ? 1.012 : 1)
+        .shadow(color: privateHovered ? accentColor.opacity(0.14) : .clear, radius: 12, y: 5)
+        .onHover { value in
+            withAnimation(.easeOut(duration: 0.16)) { privateHovered = value }
+        }
         .cursorHelp("Open a private tab without saving history")
         .accessibilityLabel("Open Private Tab, history disabled")
     }
 
     private var librarySection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 7) {
             sectionHeader("Library", symbol: "books.vertical") { EmptyView() }
             VStack(spacing: 2) {
                 SidebarActionRow(title: "Bookmarks", symbol: "bookmark.fill", action: showBookmarks)
                 SidebarActionRow(title: "History", symbol: "clock.arrow.circlepath", action: showHistory)
+                SidebarActionRow(title: "Archive", symbol: "archivebox.fill",
+                                 badge: archiveCount == 0 ? nil : "\(archiveCount)",
+                                 action: showArchive)
                 SidebarActionRow(title: "Downloads", symbol: "arrow.down.circle.fill",
                                  badge: downloads.records.isEmpty ? nil : "\(downloads.records.count)",
                                  action: showDownloads)
             }
-            .padding(5)
-            .background(Color.primary.opacity(0.026), in: RoundedRectangle(cornerRadius: 15))
-            .overlay {
-                RoundedRectangle(cornerRadius: 15).strokeBorder(Color.primary.opacity(0.052))
-                    .allowsHitTesting(false)
-            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func sectionHeader<Trailing: View>(_ title: String, symbol: String,
                                                 @ViewBuilder trailing: () -> Trailing) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: symbol).font(.system(size: 9.5, weight: .semibold))
-            Text(title.uppercased())
-                .font(.system(size: 9.5, weight: .bold))
-                .tracking(0.7)
-            Spacer()
+        HStack(spacing: 8) {
+            Image(systemName: symbol)
+                .font(.system(size: 9.5, weight: .semibold))
+                .foregroundStyle(accentColor.opacity(0.88))
+                .frame(width: 16, height: 16)
+            Text(title)
+                .font(.system(size: 10.5, weight: .semibold))
+            LinearGradient(colors: [Color.primary.opacity(0.1), .clear],
+                           startPoint: .leading, endPoint: .trailing)
+                .frame(height: 1)
             trailing()
         }
-        .foregroundStyle(.tertiary)
-        .padding(.horizontal, 5)
+        .foregroundStyle(.secondary)
+        .frame(maxWidth: .infinity)
+        .frame(height: SidebarMetrics.sectionHeaderHeight)
     }
 
     private var footer: some View {
         HStack(spacing: 9) {
-            ZStack {
-                Circle().fill(networkColor.opacity(0.15)).frame(width: 24, height: 24)
-                Circle().fill(networkColor).frame(width: 7, height: 7)
-            }
+            Circle()
+                .fill(networkColor)
+                .frame(width: 8, height: 8)
+                .shadow(color: networkColor.opacity(0.5), radius: 5)
             VStack(alignment: .leading, spacing: 1) {
                 Text(network.isConnected ? "Connected" : "Offline")
                     .font(.system(size: 10.5, weight: .semibold))
@@ -303,10 +355,14 @@ struct BrowserSidebarView: View {
                     .foregroundStyle(accentColor)
             }
         }
-        .padding(.horizontal, 13)
-        .frame(height: 48)
-        .background(Color.primary.opacity(0.035))
-        .overlay(alignment: .top) { Divider().opacity(0.26).allowsHitTesting(false) }
+        .padding(.horizontal, SidebarMetrics.contentInset)
+        .frame(height: 47)
+        .overlay(alignment: .top) {
+            LinearGradient(colors: [.clear, Color.primary.opacity(0.09), .clear],
+                           startPoint: .leading, endPoint: .trailing)
+                .frame(height: 1)
+                .allowsHitTesting(false)
+        }
     }
 
     private var selectedWorkspace: BrowserWorkspace? {
@@ -350,13 +406,13 @@ private struct SidebarActionRow: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 10) {
+            HStack(spacing: SidebarMetrics.rowLabelSpacing) {
                 Image(systemName: symbol)
                     .font(.system(size: 11.5, weight: .medium))
-                    .frame(width: 28, height: 28)
+                    .frame(width: SidebarMetrics.rowIconSize, height: SidebarMetrics.rowIconSize)
                     .foregroundStyle(hovered ? accentColor : Color.secondary)
-                    .background(Color.primary.opacity(hovered ? 0.065 : 0.035),
-                                in: RoundedRectangle(cornerRadius: 8))
+                    .background(hovered ? accentColor.opacity(0.11) : Color.primary.opacity(0.035),
+                                in: Circle())
                 Text(title).font(.system(size: 12.5, weight: .medium))
                 Spacer()
                 if let badge {
@@ -368,14 +424,15 @@ private struct SidebarActionRow: View {
                 } else if hovered {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(accentColor.opacity(0.7))
                 }
             }
-            .padding(.horizontal, 8)
+            .padding(.leading, SidebarMetrics.rowLeadingInset)
+            .padding(.trailing, 9)
+            .frame(maxWidth: .infinity)
             .frame(height: 40)
-            .background(Color.primary.opacity(hovered ? 0.04 : 0.001),
-                        in: RoundedRectangle(cornerRadius: 10))
-            .contentShape(RoundedRectangle(cornerRadius: 10))
+            .background(Color.primary.opacity(hovered ? 0.05 : 0), in: Capsule())
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .onHover { value in withAnimation(.easeOut(duration: 0.13)) { hovered = value } }

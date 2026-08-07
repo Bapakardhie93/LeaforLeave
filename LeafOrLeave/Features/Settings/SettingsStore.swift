@@ -12,7 +12,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         }
     }
 }
-enum LeafAppearance: String, Codable, CaseIterable { case system, light, dark, graphiteDark }
+enum LeafAppearance: String, Codable, CaseIterable { case system, light, dark, graphiteDark, liquidGlass }
 enum SearchEngine: String, Codable, CaseIterable { case google, duckDuckGo, bing, custom }
 enum UIAccent: String, Codable, CaseIterable { case violet, blue, teal, green, orange, pink }
 enum InterfaceDensity: String, Codable, CaseIterable { case comfortable, compact, spacious }

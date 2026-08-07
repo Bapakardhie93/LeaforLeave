@@ -2,6 +2,8 @@ import AppKit
 import SwiftUI
 
 struct SettingsCard<Content: View>: View {
+    @Environment(\.leafAppearance) private var appearance
+    @Environment(\.leafAccentColor) private var accentColor
     let title: String?
     let subtitle: String?
     let content: Content
@@ -27,22 +29,50 @@ struct SettingsCard<Content: View>: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 14)
-                .padding(.bottom, 11)
+                .padding(.horizontal, 18)
+                .padding(.top, 16)
+                .padding(.bottom, 12)
             }
             content
         }
-        .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background {
+            if appearance.isLiquidGlass {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color.white.opacity(0.045), accentColor.opacity(0.018), .clear],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                    }
+            } else {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color.primary.opacity(0.032))
+            }
+        }
         .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.075))
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: appearance.isLiquidGlass
+                            ? [Color.white.opacity(0.20), accentColor.opacity(0.08), Color.primary.opacity(0.045)]
+                            : [Color.primary.opacity(0.095), Color.primary.opacity(0.035)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
                 .allowsHitTesting(false)
         }
+        .shadow(color: .black.opacity(appearance.isLiquidGlass ? 0.10 : 0.035), radius: 14, y: 6)
     }
 }
 
 struct SettingsToggleRow: View {
+    @Environment(\.leafAccentColor) private var accentColor
     let icon: String
     let title: String
     let detail: String
@@ -51,11 +81,7 @@ struct SettingsToggleRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(LeafTypography.bodyEmphasized)
-                .foregroundStyle(enabled ? LeafColors.accent : .secondary)
-                .frame(width: 30, height: 30)
-                .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
+            SettingsRowIcon(icon: icon, color: enabled ? accentColor : .secondary)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
@@ -71,8 +97,8 @@ struct SettingsToggleRow: View {
                 .labelsHidden()
                 .disabled(!enabled)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 11)
         .opacity(enabled ? 1 : 0.55)
     }
 }
@@ -93,11 +119,7 @@ struct SettingsValueRow<Value: View>: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(LeafTypography.bodyEmphasized)
-                .foregroundStyle(LeafColors.accent)
-                .frame(width: 30, height: 30)
-                .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
+            SettingsRowIcon(icon: icon)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(LeafTypography.body)
                 if let detail {
@@ -107,30 +129,60 @@ struct SettingsValueRow<Value: View>: View {
             Spacer(minLength: 16)
             value
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 11)
     }
 }
 
 struct SettingsDivider: View {
     var body: some View {
-        Divider().padding(.leading, 56)
+        LinearGradient(
+            colors: [.clear, Color.primary.opacity(0.085), Color.primary.opacity(0.035), .clear],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+        .frame(height: 1)
+        .padding(.leading, 60)
+        .padding(.trailing, 14)
+    }
+}
+
+private struct SettingsRowIcon: View {
+    @Environment(\.leafAccentColor) private var accentColor
+    let icon: String
+    var color: Color?
+
+    var body: some View {
+        let resolvedColor = color ?? accentColor
+        Image(systemName: icon)
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(resolvedColor)
+            .frame(width: 17, height: 17)
+            .frame(width: 32, height: 32)
+            .background(resolvedColor.opacity(0.105), in: Circle())
+            .overlay {
+                Circle()
+                    .strokeBorder(resolvedColor.opacity(0.09))
+                    .allowsHitTesting(false)
+            }
     }
 }
 
 struct SettingsMetricCard: View {
+    @Environment(\.leafAccentColor) private var accentColor
     let title: String
     let value: String
     let icon: String
-    var color: Color = LeafColors.accent
+    var color: Color?
 
     var body: some View {
+        let resolvedColor = color ?? accentColor
         HStack(spacing: 10) {
             Image(systemName: icon)
                 .font(LeafTypography.bodyEmphasized)
-                .foregroundStyle(color)
+                .foregroundStyle(resolvedColor)
                 .frame(width: 30, height: 30)
-                .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+                .background(resolvedColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
             VStack(alignment: .leading, spacing: 1) {
                 Text(value).font(LeafTypography.metric)
                 Text(title).font(LeafTypography.caption).foregroundStyle(.secondary)
@@ -186,6 +238,7 @@ enum SettingsPalette {
 }
 
 struct SettingsIconPicker: View {
+    @Environment(\.leafAccentColor) private var accentColor
     @Binding var selection: String
     var symbols = SettingsPalette.workspaceSymbols
     @State private var isPresented = false
@@ -239,7 +292,7 @@ struct SettingsIconPicker: View {
                                     .font(.system(size: 14, weight: .medium))
                                     .frame(width: 36, height: 36)
                                     .foregroundStyle(selection == symbol ? Color.white : Color.primary)
-                                    .background(selection == symbol ? LeafColors.accent : Color.primary.opacity(0.045),
+                                    .background(selection == symbol ? accentColor : Color.primary.opacity(0.045),
                                                 in: RoundedRectangle(cornerRadius: 9))
                             }
                             .buttonStyle(.plain)
@@ -261,6 +314,7 @@ struct SettingsIconPicker: View {
 }
 
 struct KeyboardShortcutsSettingsCard: View {
+    @Environment(\.leafAccentColor) private var accentColor
     @Bindable var settings: SettingsStore
 
     var body: some View {
@@ -270,9 +324,11 @@ struct KeyboardShortcutsSettingsCard: View {
                 ForEach(Array(BrowserShortcutAction.allCases.enumerated()), id: \.element.id) { index, action in
                     HStack(spacing: 12) {
                         Image(systemName: action.symbol)
-                            .foregroundStyle(LeafColors.accent)
-                            .frame(width: 30, height: 30)
-                            .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(accentColor)
+                            .frame(width: 17, height: 17)
+                            .frame(width: 32, height: 32)
+                            .background(accentColor.opacity(0.105), in: Circle())
                         VStack(alignment: .leading, spacing: 2) {
                             Text(action.title).font(.system(size: 13, weight: .medium))
                             if let conflict = settings.conflictingAction(
@@ -290,8 +346,8 @@ struct KeyboardShortcutsSettingsCard: View {
                         )
                         .frame(width: 122, height: 30)
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 9)
                     if index < BrowserShortcutAction.allCases.count - 1 {
                         SettingsDivider()
                     }

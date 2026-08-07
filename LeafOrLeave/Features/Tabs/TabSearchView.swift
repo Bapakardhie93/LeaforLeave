@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct TabSearchView: View {
+    @Environment(\.leafAccentColor) private var accentColor
     let manager: TabManager
     let visibleTabIDs: Set<UUID>?
     let selectedTabID: UUID?
@@ -52,10 +53,10 @@ struct TabSearchView: View {
                                     if tab.lifecycleState == .discarded || tab.lifecycleState == .sleeping {
                                         Image(systemName: "moon.zzz").foregroundStyle(.tertiary).help("Inactive tab")
                                     }
-                                    if tab.isMediaPlaying { Image(systemName: "speaker.wave.2.fill").foregroundStyle(LeafColors.accent) }
+                                    if tab.isMediaPlaying { Image(systemName: "speaker.wave.2.fill").foregroundStyle(accentColor) }
                                 }
                                 .padding(.horizontal, 10).frame(height: 48)
-                                .background(tab.id == selectedTabID ? LeafColors.accent.opacity(0.14) : .clear,
+                                .background(tab.id == selectedTabID ? accentColor.opacity(0.14) : .clear,
                                             in: RoundedRectangle(cornerRadius: 9))
                             }
                             .buttonStyle(.plain)

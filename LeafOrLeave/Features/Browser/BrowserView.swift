@@ -3,7 +3,7 @@ import SwiftUI
 import WebKit
 
 private enum BrowserLibraryPanel: String, Identifiable {
-    case downloads, bookmarks, history
+    case downloads, bookmarks, history, archive
     var id: String { rawValue }
 }
 
@@ -24,17 +24,16 @@ struct BrowserView: View {
     @State private var validatingNetwork = false
     @State private var activeLibraryPanel: BrowserLibraryPanel?
     @State private var showMedia = false
-    @State private var showEqualizer = false
     @State private var showFindBar = false
     @State private var findText = ""
     @State private var findResult = ""
     @State private var showPermissions = false
     @State private var showTabSearch = false
     @State private var showDeveloperConsole = false
+    @State private var showTabReview = false
     @State private var splitMenuHovered = false
     @State private var downloadToastID: UUID?
     @State private var dismissDownloadToastTask: Task<Void, Never>?
-    @State private var equalizer = EqualizerViewModel()
     @State private var omniboxFocused = false
     @State private var omniboxSelectionRequest = 0
 
@@ -46,7 +45,9 @@ struct BrowserView: View {
                                select: selectWorkspace, newPrivateTab: newPrivateTab,
                                showBookmarks: { presentLibraryPanel(.bookmarks) },
                                showHistory: { presentLibraryPanel(.history) },
+                               showArchive: { presentLibraryPanel(.archive) },
                                showDownloads: { presentLibraryPanel(.downloads) },
+                               archiveCount: libraryManager.archivedTabs.count,
                                collapse: { withAnimation(.easeInOut(duration: 0.18)) { settings.value.showSidebar = false } })
             Divider()
           }
@@ -108,12 +109,14 @@ struct BrowserView: View {
                 LibraryListView(manager: libraryManager, kind: .bookmarks, open: openLibraryURL)
             case .history:
                 LibraryListView(manager: libraryManager, kind: .history, open: openLibraryURL)
+            case .archive:
+                LibraryListView(manager: libraryManager, kind: .archive, open: openArchivedURL)
             }
         }
+        .sheet(isPresented: $showTabReview) { TabReviewView(manager: tabManager) }
         .sheet(isPresented: $showPermissions) { PermissionsView() }
         .sheet(isPresented: $showDeveloperConsole) { DeveloperConsoleView(tab: focusedTab) }
         .popover(isPresented: $showMedia) { MiniMediaPanel(coordinator: mediaCoordinator) { tabManager.selectTab(id: $0, in: window.id) } }
-        .sheet(isPresented: $showEqualizer) { EqualizerView(model: equalizer) { if let webView = focusedTab?.webView { equalizer.apply(to: webView) } } }
         .onChange(of: window.workspaceID) { oldID, id in
             if oldID != id { window.exitSplit() }
             activateWorkspace(id)
@@ -358,7 +361,11 @@ struct BrowserView: View {
         .frame(height: toolbarHeight)
         .padding(.horizontal, toolbarHorizontalPadding)
         .background { toolbarBackground }
-        .overlay(alignment: .bottom) { Divider().opacity(0.32).allowsHitTesting(false) }
+        .overlay(alignment: .bottom) {
+            if settings.value.toolbarStyle != .floating {
+                Divider().opacity(0.32).allowsHitTesting(false)
+            }
+        }
         .background {
             Button("") { focusOmnibox(selectingAll: true) }
                 .keyboardShortcut(shortcut(.focusAddress).keyEquivalent,
@@ -379,19 +386,9 @@ struct BrowserView: View {
                 Color.clear
                     .frame(width: BrowserChromeMetrics.trafficLightReserve, height: 1)
                     .accessibilityHidden(true)
-                BrowserToolbarButton(systemName: "sidebar.left",
-                                     helpText: "Show Sidebar (\(shortcut(.toggleSidebar).display))") {
-                    withAnimation(.easeInOut(duration: 0.18)) { settings.value.showSidebar = true }
-                }
             }
 
-            navigationControls
-
-            if settings.value.showHomeButton {
-                BrowserToolbarButton(systemName: "house", helpText: "Home", drawsBackground: true) {
-                    openWorkspaceHome()
-                }
-            }
+            leadingToolbarControls
 
             Spacer(minLength: 2)
             omnibox
@@ -407,8 +404,65 @@ struct BrowserView: View {
         }
     }
 
+    @ViewBuilder private var leadingToolbarControls: some View {
+        if settings.value.toolbarStyle == .floating {
+            HStack(spacing: 6) {
+                if !settings.value.showSidebar {
+                    sidebarToolbarButton(drawsBackground: false)
+                }
+                navigationButtons
+                if settings.value.showHomeButton {
+                    homeToolbarButton(drawsBackground: false)
+                }
+            }
+            .padding(.horizontal, 4)
+            .background(
+                toolbarGroupColor,
+                in: RoundedRectangle(cornerRadius: toolbarGroupCornerRadius, style: .continuous)
+            )
+            .overlay { toolbarGroupBorder }
+        } else {
+            HStack(spacing: 10) {
+                if !settings.value.showSidebar {
+                    sidebarToolbarButton(drawsBackground: true)
+                }
+                navigationControls
+                if settings.value.showHomeButton {
+                    homeToolbarButton(drawsBackground: true)
+                }
+            }
+        }
+    }
+
+    private func sidebarToolbarButton(drawsBackground: Bool) -> some View {
+        BrowserToolbarButton(
+            systemName: "sidebar.left",
+            helpText: "Show Sidebar (\(shortcut(.toggleSidebar).display))",
+            drawsBackground: drawsBackground,
+            iconScale: 1.08
+        ) {
+            withAnimation(.easeInOut(duration: 0.18)) { settings.value.showSidebar = true }
+        }
+    }
+
+    private func homeToolbarButton(drawsBackground: Bool) -> some View {
+        BrowserToolbarButton(systemName: "house", helpText: "Home", drawsBackground: drawsBackground) {
+            openWorkspaceHome()
+        }
+    }
+
     private var navigationControls: some View {
-        HStack(spacing: 0) {
+        navigationButtons
+            .padding(2)
+            .background(
+                toolbarGroupColor,
+                in: RoundedRectangle(cornerRadius: toolbarGroupCornerRadius, style: .continuous)
+            )
+            .overlay { toolbarGroupBorder }
+    }
+
+    private var navigationButtons: some View {
+        HStack(spacing: 2) {
             BrowserToolbarButton(
                 systemName: "chevron.left",
                 helpText: "Back",
@@ -416,9 +470,6 @@ struct BrowserView: View {
             ) {
                 focusedTab?.navigateBack()
             }
-            Rectangle()
-                .fill(Color.primary.opacity(0.10))
-                .frame(width: 1, height: 16)
             BrowserToolbarButton(
                 systemName: "chevron.right",
                 helpText: "Forward",
@@ -426,13 +477,6 @@ struct BrowserView: View {
             ) {
                 focusedTab?.navigateForward()
             }
-        }
-        .padding(.horizontal, 2)
-        .background(toolbarGroupColor, in: RoundedRectangle(cornerRadius: toolbarGroupCornerRadius, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.06))
-                .allowsHitTesting(false)
         }
     }
 
@@ -494,7 +538,15 @@ struct BrowserView: View {
     private var fullToolbarActions: some View {
         HStack(spacing: 8) {
             if settings.value.showNetworkHUD {
-                NetworkStatusButton(network: networkMonitor)
+                NetworkStatusButton(
+                    network: networkMonitor,
+                    surfaceColor: settings.value.toolbarStyle == .floating
+                        ? toolbarGroupColor
+                        : LeafColors.chromeSurface,
+                    cornerRadius: settings.value.toolbarStyle == .floating
+                        ? toolbarGroupCornerRadius
+                        : 9
+                )
                     .fixedSize()
             }
             HStack(spacing: 2) {
@@ -521,11 +573,7 @@ struct BrowserView: View {
             }
             .padding(.horizontal, 2)
             .background(toolbarGroupColor, in: RoundedRectangle(cornerRadius: toolbarGroupCornerRadius, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.055))
-                    .allowsHitTesting(false)
-            }
+            .overlay { toolbarGroupBorder }
         }
     }
 
@@ -541,11 +589,7 @@ struct BrowserView: View {
         }
         .padding(.horizontal, 2)
         .background(toolbarGroupColor, in: RoundedRectangle(cornerRadius: toolbarGroupCornerRadius, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.055))
-                .allowsHitTesting(false)
-        }
+        .overlay { toolbarGroupBorder }
     }
 
     private var splitToolbarMenu: some View {
@@ -713,8 +757,10 @@ struct BrowserView: View {
             bookmarks: { presentLibraryPanel(.bookmarks) },
             history: { presentLibraryPanel(.history) },
             downloads: { presentLibraryPanel(.downloads) },
+            reviewTabs: { showTabReview = true },
+            archive: { if let id = focusedTab?.id { _ = tabManager.archiveTab(id: id) } },
             permissions: { showPermissions = true },
-            performance: { showInspector = true }, equalizer: { showEqualizer = true }
+            performance: { showInspector = true }
         )
     }
 
@@ -896,6 +942,13 @@ struct BrowserView: View {
         else { tabManager.createTab(opening: url, in: window.id) }
     }
 
+    private func openArchivedURL(_ url: URL) {
+        openLibraryURL(url)
+        if let archived = libraryManager.archivedTabs.first(where: { $0.url == url }) {
+            libraryManager.removeArchivedTab(archived.id)
+        }
+    }
+
     private var activeDownloadCount: Int {
         downloadManager.records.filter { $0.status == .downloading }.count
     }
@@ -925,6 +978,10 @@ struct BrowserView: View {
         case .light: .white
         case .dark: Color(nsColor: .windowBackgroundColor)
         case .graphiteDark: Color(red: 0.055, green: 0.058, blue: 0.064)
+        case .liquidGlass:
+            settings.value.reducedTransparency
+                ? Color(nsColor: .windowBackgroundColor).opacity(0.96)
+                : LeafColors.liquidGlassBackground
         }
     }
 
@@ -962,12 +1019,22 @@ struct BrowserView: View {
         switch settings.value.toolbarStyle {
         case .minimal: .clear
         case .unified: LeafColors.chromeSurface
-        case .floating: accentColor.opacity(0.095)
+        case .floating: accentColor.opacity(0.075)
         }
     }
 
     private var toolbarGroupCornerRadius: CGFloat {
-        settings.value.toolbarStyle == .floating ? 14 : 9
+        settings.value.toolbarStyle == .floating ? 10 : 9
+    }
+
+    private var toolbarGroupBorder: some View {
+        RoundedRectangle(cornerRadius: toolbarGroupCornerRadius, style: .continuous)
+            .strokeBorder(
+                settings.value.toolbarStyle == .floating
+                    ? accentColor.opacity(0.13)
+                    : Color.primary.opacity(0.06)
+            )
+            .allowsHitTesting(false)
     }
 
     @ViewBuilder private var toolbarBackground: some View {
@@ -993,7 +1060,7 @@ struct BrowserView: View {
                     .fill(settings.value.reducedTransparency ? AnyShapeStyle(browserBackground) : AnyShapeStyle(.regularMaterial))
                     .overlay {
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .strokeBorder(accentColor.opacity(0.16))
+                            .strokeBorder(accentColor.opacity(0.12))
                             .allowsHitTesting(false)
                     }
                     .padding(.horizontal, 7)
@@ -1003,28 +1070,8 @@ struct BrowserView: View {
     }
 
     private var accentColor: Color {
-        if settings.value.useCustomAccent {
-            return settings.value.customAccent.color
-        }
-        if settings.value.useWorkspaceAccent,
-           let workspaceAccent = selectedWorkspace?.accentName {
-            switch workspaceAccent {
-            case "blue": return .blue
-            case "teal": return .teal
-            case "green": return .green
-            case "orange": return .orange
-            case "pink": return .pink
-            default: return LeafColors.accent
-            }
-        }
-        switch settings.value.accent {
-        case .violet: return LeafColors.accent
-        case .blue: return .blue
-        case .teal: return .teal
-        case .green: return .green
-        case .orange: return .orange
-        case .pink: return .pink
-        }
+        let workspaceAccent = selectedWorkspace.map { $0.accentName ?? $0.accentToken }
+        return settings.value.resolvedAccentColor(workspaceAccent: workspaceAccent)
     }
 
     private func openTerminal() {

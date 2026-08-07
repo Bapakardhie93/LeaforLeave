@@ -194,6 +194,10 @@ Jika aset logo diperbarui pada masa mendatang, gunakan kembali sumber resmi bere
 
 ## Pembaruan Terbaru
 
+- Alur inti **Keep, Archive, atau Leave** kini tersedia langsung dari menu tab dan menu halaman; Archive mempertahankan judul, URL, waktu, dan konteks workspace tanpa membiarkan tab tetap aktif.
+- Review Open Tabs membantu meninjau tab lama dalam satu tempat, sementara status sleeping, frozen, dan discarded kini tetap terjaga ketika tab berpindah ke latar belakang.
+- Data browser dapat diekspor dan diimpor sebagai backup JSON berversi yang mencakup settings, template workspace, bookmark, dan archive tanpa menyertakan password, cookie, history, maupun sesi tab aktif.
+- Pipeline CI dan pemeriksaan rilis lokal kini menjalankan pengujian otomatis serta build Release tanpa signing sebelum artefak didistribusikan.
 - Sistem seret tab diperbaiki agar lebih responsif, dapat memindahkan tab antar-jendela, dapat mengembalikan tab ke jendela asal, tidak membuat tab baru berulang, dan tidak mengekspor kode unik sebagai file ke Desktop.
 - Siklus hidup multi-jendela dirapikan agar jendela kosong ditutup pada waktu yang tepat tanpa menutup jendela tujuan.
 - History, Bookmarks, dan Downloads diperbarui dengan tampilan yang lebih modern, pencarian, filter, ringkasan, serta pembukaan panel yang langsung merespons pada klik pertama.
@@ -209,13 +213,13 @@ Jika aset logo diperbarui pada masa mendatang, gunakan kembali sumber resmi bere
 |---|---|
 | **Workspaces** | Lingkungan terpisah dengan tab, pin, ikon, warna, home page, dan urutan tersendiri |
 | **Touch Bar** | Perpindahan workspace berbasis ikon, label putih berkontras tinggi, ikon berwarna, dan pemilihan tab dengan animasi native pada Mac yang mendukung |
-| **Tab** | Membuat, menutup, menduplikasi, membuka kembali, mengurutkan, menyematkan, mencari, memakai tab privat, dan memulihkan sesi |
+| **Tab** | Membuat, menutup, menduplikasi, membuka kembali, mengurutkan, mencari, memakai tab privat, memulihkan sesi, serta memutuskan Keep, Archive, atau Leave |
 | **Multi-jendela** | Jendela independen, seret tab antar-jendela, pisahkan ke jendela baru, kembalikan ke jendela asal, dan pulihkan posisi jendela |
 | **Split screen** | Dua atau tiga tab berdampingan dalam satu jendela dengan panel fokus dan pembatas native |
 | **Passwords** | macOS Keychain, autentikasi perangkat, pengisian otomatis, pemilih multi-akun, serta penyimpanan/pembaruan otomatis |
 | **Performance** | Smart Tab Suspension, pemantauan tekanan memori, metrik siklus hidup, dan optimasi manual |
 | **Network** | Status koneksi, pemantau latensi, routing jaringan lokal, halaman offline, dan pemulihan kegagalan navigasi |
-| **Media** | Deteksi media per tab, putar/jeda, bisukan, seek, mini-player, dan equalizer |
+| **Media** | Deteksi media per tab, putar/jeda, bisukan, seek, dan mini-player |
 | **Downloads** | Progres, ukuran file, pencarian/filter modern, pemilih tujuan, nama file aman, buka, dan tampilkan di Finder |
 | **Developer** | Konsol, evaluasi JavaScript, Web Inspector, pencatatan operasional, dan laporan diagnostik |
 
@@ -280,7 +284,6 @@ Jika aset logo diperbarui pada masa mendatang, gunakan kembali sumber resmi bere
 
 - Status audio/video diperbarui per tab.
 - Kontrol play, pause, mute, seek, dan mini-player.
-- Equalizer eksperimental untuk media HTML5 yang kompatibel.
 - Panel Downloads modern dengan ringkasan aktif/selesai/ukuran, pencarian, filter, status, dan aksi kontekstual.
 - Notifikasi unduhan, progres toolbar, riwayat unduhan, dan pemilih tujuan.
 - File dapat dibuka langsung atau ditampilkan di Finder.
@@ -298,9 +301,10 @@ Jika aset logo diperbarui pada masa mendatang, gunakan kembali sumber resmi bere
 
 ### Library
 
-- Bookmarks dan History menggunakan tata letak modern yang konsisten dengan Downloads.
+- Bookmarks, History, dan Archive menggunakan tata letak modern yang konsisten dengan Downloads.
 - Pencarian, pengelompokan, metadata, status kosong, dan aksi item dibuat lebih jelas dan responsif.
-- Panel Bookmarks, History, dan Downloads dipersiapkan saat aplikasi aktif sehingga dapat terbuka pada interaksi pertama tanpa jeda yang terasa.
+- Archive menyimpan halaman yang ingin dilepas dari tab aktif tetapi masih layak dikunjungi kembali, lengkap dengan konteks workspace asal.
+- Panel Bookmarks, History, Archive, dan Downloads dipersiapkan saat aplikasi aktif sehingga dapat terbuka pada interaksi pertama tanpa jeda yang terasa.
 
 ## Privasi dan Keamanan
 
@@ -372,6 +376,12 @@ xcodebuild test \
   -only-testing:LeafOrLeaveUITests/LeafOrLeaveUITests/testLibraryPanelsOpenOnFirstClick
 ```
 
+Menjalankan seluruh pemeriksaan rilis lokal:
+
+```bash
+./scripts/verify-release.sh
+```
+
 ## Struktur Proyek
 
 ```text
@@ -381,7 +391,7 @@ LeafOrLeave/
 │   ├── Browser/            # WebView configuration dan lifecycle
 │   ├── Logging/            # Operational log dan bounded diagnostics buffer
 │   ├── Networking/         # Connectivity monitoring dan recovery
-│   ├── Persistence/        # Session persistence
+│   ├── Persistence/        # Session persistence dan backup data browser
 │   └── Utilities/          # Formatter dan secure clipboard
 ├── DesignSystem/
 │   ├── Colors/             # Semantic color dan theme
@@ -391,9 +401,8 @@ LeafOrLeave/
 └── Features/
     ├── Browser/            # Browser shell, menus, console, dan network HUD
     ├── Downloads/          # Pengelola, daftar, dan notifikasi unduhan
-    ├── Equalizer/          # Web Audio equalizer
     ├── ExamProtection/     # Protected tab dan recovery
-    ├── Library/            # Tampilan Bookmarks dan History
+    ├── Library/            # Tampilan Bookmarks, History, dan Archive
     ├── Media/              # Media bridge dan mini panel
     ├── Omnibox/            # Address and search resolution
     ├── Passwords/          # Keychain vault, capture, dan autofill
@@ -436,7 +445,7 @@ Prioritas pengembangan berikutnya:
 - Pengelolaan data per situs yang lebih lengkap.
 - Accessibility audit untuk VoiceOver, keyboard-only navigation, contrast, dan reduced motion.
 - Localization Bahasa Indonesia dan English.
-- CI untuk build, pengujian, pemeriksaan statis, dan artefak rilis.
+- Memperluas CI dengan pemeriksaan statis dan artefak distribusi bertanda tangan.
 - Hardened runtime, notarisasi, pengemasan, dan distribusi beta.
 
 ## Kontribusi

@@ -189,6 +189,26 @@ struct LeafOrLeaveTests {
         #expect(settings.shortcut(for: .newTab).display == "⌘T")
     }
 
+    @Test func customAccentOverridesWorkspaceAndPresetColors() {
+        var settings = SettingsData()
+        settings.accent = .orange
+        settings.useWorkspaceAccent = true
+        settings.useCustomAccent = true
+        settings.customAccent = UserAccentColor(
+            red: 0.18,
+            green: 0.72,
+            blue: 0.63,
+            opacity: 1
+        )
+
+        let resolved = UserAccentColor(
+            color: settings.resolvedAccentColor(workspaceAccent: "pink")
+        )
+        #expect(abs(resolved.red - 0.18) < 0.01)
+        #expect(abs(resolved.green - 0.72) < 0.01)
+        #expect(abs(resolved.blue - 0.63) < 0.01)
+    }
+
     @Test func customKeyboardShortcutsPersistAndDetectConflicts() {
         let suite = UserDefaults(suiteName: UUID().uuidString)!
         var settings: SettingsStore? = SettingsStore(defaults: suite)
@@ -254,6 +274,127 @@ struct LeafOrLeaveTests {
         #expect(manager.autocompleteSuggestion(for: "search words") == nil)
     }
 
+    @Test func archivedTabsPersistWorkspaceContextAndDeduplicateURLs() throws {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        var manager: LibraryManager? = LibraryManager(defaults: defaults)
+        let url = try #require(URL(string: "https://developer.apple.com/documentation/webkit"))
+
+        manager?.archive(title: "WebKit", url: url, workspaceName: "Coding",
+                         at: Date(timeIntervalSince1970: 1_000))
+        manager?.archive(title: "WebKit Documentation", url: url, workspaceName: "Research",
+                         at: Date(timeIntervalSince1970: 2_000))
+
+        #expect(manager?.archivedTabs.count == 1)
+        #expect(manager?.archivedTabs.first?.title == "WebKit Documentation")
+        #expect(manager?.archivedTabs.first?.workspaceName == "Research")
+        manager = nil
+
+        let restored = LibraryManager(defaults: defaults)
+        #expect(restored.archivedTabs.count == 1)
+        #expect(restored.archivedTabs.first?.url == url)
+    }
+
+    @Test func keepArchiveAndLeaveApplyTheCoreTabDecisions() throws {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let library = LibraryManager(defaults: defaults)
+        let workspaces = WorkspaceManager(defaults: defaults)
+        let manager = TabManager(
+            webViewFactory: WebViewFactory(configuration: .default),
+            sessionStore: SessionStore(defaults: defaults),
+            restoresPreviousSession: false
+        )
+        manager.libraryManager = library
+        manager.workspaceManager = workspaces
+        let window = try #require(manager.activeWindow)
+        let workspaceID = try #require(workspaces.workspaces.first?.id)
+        window.workspaceID = workspaceID
+
+        let kept = try #require(manager.selectedTab)
+        workspaces.moveTab(kept.id, to: workspaceID)
+        manager.keepTab(id: kept.id)
+        #expect(kept.isPinned)
+        #expect(workspaces.workspaces.first?.pinnedTabIDs.contains(kept.id) == true)
+
+        let archived = manager.createTab(
+            opening: URL(string: "https://example.com/archive-me"),
+            in: window.id
+        )
+        workspaces.moveTab(archived.id, to: workspaceID)
+        #expect(manager.archiveTab(id: archived.id))
+        #expect(manager.tab(id: archived.id) == nil)
+        #expect(library.archivedTabs.first?.url.absoluteString == "https://example.com/archive-me")
+        #expect(library.archivedTabs.first?.workspaceName == "Study")
+
+        let leaving = manager.createTab(
+            opening: URL(string: "https://example.com/leave-me"),
+            in: window.id
+        )
+        manager.leaveTab(id: leaving.id)
+        #expect(manager.tab(id: leaving.id) == nil)
+        #expect(library.archivedTabs.contains { $0.url.absoluteString.contains("leave-me") } == false)
+    }
+
+    @Test func lifecycleUpdatesPreserveSuspendedBackgroundTabsUntilSelected() throws {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let manager = TabManager(
+            webViewFactory: WebViewFactory(configuration: .default),
+            sessionStore: SessionStore(defaults: defaults),
+            restoresPreviousSession: false
+        )
+        let window = try #require(manager.activeWindow)
+        let first = try #require(manager.selectedTab)
+        let second = manager.createTab(in: window.id)
+
+        #expect(first.lifecycleState == .background)
+        first.sleep()
+        #expect(first.lifecycleState == .sleeping)
+
+        _ = manager.createTab(in: window.id)
+        #expect(first.lifecycleState == .sleeping)
+        manager.selectTab(id: first.id, in: window.id)
+        #expect(first.lifecycleState == .active)
+        #expect(second.lifecycleState == .background)
+    }
+
+    @Test func browserDataBackupRoundTripsSavedDataWithoutHistory() throws {
+        let sourceDefaults = UserDefaults(suiteName: UUID().uuidString)!
+        let sourceSettings = SettingsStore(defaults: sourceDefaults)
+        let sourceLibrary = LibraryManager(defaults: sourceDefaults)
+        let sourceWorkspaces = WorkspaceManager(defaults: sourceDefaults)
+        let bookmarkURL = try #require(URL(string: "https://example.com/bookmark"))
+        let archivedURL = try #require(URL(string: "https://example.com/archive"))
+        sourceSettings.value.showSidebar = false
+        sourceLibrary.toggleBookmark(title: "Bookmark", url: bookmarkURL)
+        sourceLibrary.recordVisit(title: "Private backup omission", url: bookmarkURL)
+        sourceLibrary.archive(title: "Archived", url: archivedURL, workspaceName: "Study")
+
+        let backup = BrowserDataBackupService.makeBackup(
+            settings: sourceSettings,
+            library: sourceLibrary,
+            workspaces: sourceWorkspaces
+        )
+        let decoded = try BrowserDataBackupService.decode(
+            BrowserDataBackupService.encode(backup)
+        )
+
+        let targetDefaults = UserDefaults(suiteName: UUID().uuidString)!
+        let targetSettings = SettingsStore(defaults: targetDefaults)
+        let targetLibrary = LibraryManager(defaults: targetDefaults)
+        let targetWorkspaces = WorkspaceManager(defaults: targetDefaults)
+        BrowserDataBackupService.restore(
+            decoded,
+            settings: targetSettings,
+            library: targetLibrary,
+            workspaces: targetWorkspaces
+        )
+
+        #expect(!targetSettings.value.showSidebar)
+        #expect(targetLibrary.bookmarks.first?.url == bookmarkURL)
+        #expect(targetLibrary.archivedTabs.first?.url == archivedURL)
+        #expect(targetLibrary.history.isEmpty)
+        #expect(targetWorkspaces.workspaces.map(\.name).contains("Study"))
+    }
+
     @Test func legacyHistoryWithoutVisitCountStillLoads() throws {
         struct LegacyEntry: Encodable {
             let id: UUID
@@ -313,6 +454,103 @@ struct LeafOrLeaveTests {
 
         #expect(store.load()?.tabs.isEmpty == true)
         #expect(store.load()?.windows.isEmpty == true)
+    }
+
+    @Test func popupTabsStayWithTheirOpenerAndActivateAfterTheWebKitCallback() async throws {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let workspaces = WorkspaceManager(defaults: defaults)
+        let manager = TabManager(
+            webViewFactory: WebViewFactory(configuration: .default),
+            sessionStore: SessionStore(defaults: defaults),
+            restoresPreviousSession: false
+        )
+        manager.workspaceManager = workspaces
+
+        let sourceWindow = try #require(manager.activeWindow)
+        let sourceTab = try #require(manager.selectedTab)
+        let workspaceID = try #require(workspaces.workspaces.first?.id)
+        sourceWindow.workspaceID = workspaceID
+        workspaces.moveTab(sourceTab.id, to: workspaceID)
+
+        // A different active window must not steal a popup created by the
+        // source tab.
+        _ = manager.createWindow()
+        let popupWebView = try #require(manager.handlePopup(
+            configuration: BrowserConfiguration.default.makeWebViewConfiguration(),
+            sourceTabID: sourceTab.id
+        ))
+        let popupTab = try #require(manager.tabs.first { $0.webView === popupWebView })
+
+        #expect(manager.ownerWindow(of: popupTab.id)?.id == sourceWindow.id)
+        #expect(sourceWindow.focusedTabID == sourceTab.id)
+        #expect(workspaces.workspaces.first { $0.id == workspaceID }?.tabIDs.contains(popupTab.id) == true)
+        #expect(popupTab.url == nil)
+
+        for _ in 0..<10 where sourceWindow.focusedTabID != popupTab.id {
+            await Task.yield()
+        }
+        #expect(sourceWindow.focusedTabID == popupTab.id)
+        #expect(manager.activeWindowID == sourceWindow.id)
+    }
+
+    @Test func popupReplacesInheritedScriptHandlersBeforeCreatingItsBrowserTab() throws {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let manager = TabManager(
+            webViewFactory: WebViewFactory(configuration: .default),
+            sessionStore: SessionStore(defaults: defaults),
+            restoresPreviousSession: false
+        )
+        let sourceTab = try #require(manager.selectedTab)
+        let configuration = BrowserConfiguration.default.makeWebViewConfiguration()
+        let inheritedController = configuration.userContentController
+        inheritedController.add(sourceTab, name: MediaScriptProvider.name)
+
+        let popupWebView = try #require(manager.handlePopup(
+            configuration: configuration,
+            sourceTabID: sourceTab.id
+        ))
+
+        #expect(popupWebView.configuration.userContentController !== inheritedController)
+        #expect(popupWebView.configuration.websiteDataStore.isPersistent)
+    }
+
+    @Test func targetBlankLinkCreatesAndDisplaysANewTab() async throws {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let manager = TabManager(
+            webViewFactory: WebViewFactory(configuration: .default),
+            sessionStore: SessionStore(defaults: defaults),
+            restoresPreviousSession: false
+        )
+        let sourceWindow = try #require(manager.activeWindow)
+        let sourceTab = try #require(manager.selectedTab)
+        sourceTab.webView.loadHTMLString(
+            "<a id='popup-link' href='about:blank#opened' target='_blank'>Open</a>",
+            baseURL: nil
+        )
+
+        var fixtureLoaded = false
+        for _ in 0..<100 {
+            fixtureLoaded = (try? await sourceTab.webView.evaluateJavaScript(
+                "document.readyState === 'complete' && document.getElementById('popup-link') !== null"
+            )) as? Bool == true
+            if fixtureLoaded { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        try #require(fixtureLoaded)
+        _ = try await sourceTab.webView.evaluateJavaScript(
+            "document.getElementById('popup-link').click()"
+        )
+
+        for _ in 0..<100 where manager.tabs.count == 1 {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let popupTab = try #require(manager.tabs.first { $0.id != sourceTab.id })
+        for _ in 0..<20 where sourceWindow.focusedTabID != popupTab.id {
+            await Task.yield()
+        }
+
+        #expect(manager.ownerWindow(of: popupTab.id)?.id == sourceWindow.id)
+        #expect(sourceWindow.focusedTabID == popupTab.id)
     }
 
     @Test func historyAPINavigationUpdatesBackAndForwardState() async throws {
@@ -915,36 +1153,6 @@ struct LeafOrLeaveTests {
         try vault.delete(second)
         #expect(vault.storedCredentialCount == 0)
         vault.lock()
-    }
-
-    @Test func equalizerCompensatesPositiveGain() {
-        let model = EqualizerViewModel()
-        model.select(EqualizerPreset(name: "Test", gains: [6, 0, 0, 0, 0, 0, 0, 0, 0, 0]))
-        #expect(model.preamp == -6)
-    }
-
-    @Test func equalizerProcessorIsInstalledAtDocumentStart() async throws {
-        let webView = WebViewFactory(configuration: .default).makeWebView()
-        let tab = BrowserTab(webView: webView)
-        defer { tab.tearDown() }
-        webView.loadHTMLString("<html><body><audio controls></audio></body></html>", baseURL: nil)
-
-        var installed = false
-        for _ in 0..<80 {
-            if let result = try? await webView.evaluateJavaScript(
-                "typeof window.__leafEqualizerController?.apply === 'function'"
-            ) as? Bool, result {
-                installed = true
-                break
-            }
-            try await Task.sleep(for: .milliseconds(25))
-        }
-
-        #expect(installed)
-        #expect(EqualizerScriptProvider.source.contains(
-            "state.enabled ? Math.pow(10, state.preamp / 20) : 1"
-        ))
-        #expect(EqualizerScriptProvider.source.contains("document.addEventListener('play'"))
     }
 
     @Test func sharedFormattingProducesStableBrowserLabels() {

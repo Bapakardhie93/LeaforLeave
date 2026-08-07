@@ -124,10 +124,20 @@ final class TabManager {
                    in windowID: UUID? = nil, isPrivate: Bool = false) -> BrowserTab {
         let destination = windowID.flatMap(window(id:)) ?? activeWindow ?? createFallbackWindow()
         let webView: WKWebView
-        if isPrivate {
+        if let configuration {
+            // Popup configurations are supplied by WebKit and preserve the
+            // opener relationship as well as the source tab's data store.
+            // Some websites hand us a configuration whose content controller
+            // already contains the opener's LeafOrLeave message handlers.
+            // BrowserTab installs its own handlers, so give the popup an empty
+            // controller to avoid duplicate-name NSInvalidArgumentException
+            // faults and callbacks being delivered to the source tab.
+            configuration.userContentController = WKUserContentController()
+            webView = webViewFactory.makeWebView(configuration: configuration)
+        } else if isPrivate {
             webView = webViewFactory.makePrivateWebView()
         } else {
-            webView = configuration.map(webViewFactory.makeWebView(configuration:)) ?? webViewFactory.makeWebView()
+            webView = webViewFactory.makeWebView()
         }
         let tab = BrowserTab(webView: webView, url: url, isPrivate: isPrivate)
         tab.webView.isInspectable = settings?.value.developerMode == true && settings?.value.webInspector == true
@@ -150,7 +160,7 @@ final class TabManager {
         if let selectedTabID { closeTab(id: selectedTabID) }
     }
 
-    func closeTab(id: UUID) {
+    func closeTab(id: UUID, addingToRecentlyClosed: Bool = true) {
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
         let tab = tabs[index]
         if tab.isExamProtected {
@@ -161,7 +171,7 @@ final class TabManager {
             alert.addButton(withTitle: "Close Anyway")
             guard alert.runModal() == .alertSecondButtonReturn else { return }
         }
-        if !tab.isPrivate {
+        if addingToRecentlyClosed, !tab.isPrivate {
             closedTabs.append(TabSessionRecord(id: tab.id, url: tab.url, title: tab.title,
                                                isPinned: tab.isPinned, lastActiveAt: tab.lastActiveAt))
             if closedTabs.count > 20 { closedTabs.removeFirst() }
@@ -177,6 +187,42 @@ final class TabManager {
             updateLifecycleStates()
             saveSession()
         }
+    }
+
+    /// Keeps a tab in the active context by pinning it in both the window and
+    /// its workspace. This is the durable "Keep" side of LeafOrLeave's core
+    /// decision flow.
+    func keepTab(id: UUID) {
+        guard let tab = tab(id: id) else { return }
+        tab.isPinned = true
+        if let workspaceID = ownerWindow(of: id)?.workspaceID {
+            workspaceManager?.pinTab(id, in: workspaceID)
+        }
+        saveSession()
+    }
+
+    /// Saves a restorable reference and removes the live WebKit tab. Private,
+    /// internal, and blank pages deliberately cannot enter the archive.
+    @discardableResult
+    func archiveTab(id: UUID) -> Bool {
+        guard let tab = tab(id: id), !tab.isPrivate, !tab.isExamProtected, let url = tab.url,
+              ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { return false }
+        let workspaceID = ownerWindow(of: id)?.workspaceID
+        let workspaceName = workspaceID.flatMap { id in
+            workspaceManager?.workspaces.first { $0.id == id }?.name
+        }
+        guard libraryManager?.archive(
+            title: tab.title,
+            url: url,
+            workspaceName: workspaceName
+        ) != nil else { return false }
+        closeTab(id: id, addingToRecentlyClosed: false)
+        LeafLog.notice("Tab archived and closed", category: .browser)
+        return true
+    }
+
+    func leaveTab(id: UUID) {
+        closeTab(id: id)
     }
 
     func selectTab(id: UUID, in windowID: UUID? = nil) {
@@ -434,14 +480,41 @@ final class TabManager {
                 guard let lhs = tab(id: $0), let rhs = tab(id: $1) else { return false }
                 return lhs.isPinned && !rhs.isPinned
             }
+            if let workspaceID = state.workspaceID {
+                if targetTab.isPinned { workspaceManager?.pinTab(id, in: workspaceID) }
+                else { workspaceManager?.unpinTab(id, in: workspaceID) }
+            }
         }
         saveSession()
     }
 
-    func handlePopup(request: URLRequest, configuration: WKWebViewConfiguration,
+    func handlePopup(configuration: WKWebViewConfiguration, sourceTabID: UUID,
                      isPrivate: Bool = false) -> WKWebView? {
-        let tab = createTab(activate: true, configuration: configuration, isPrivate: isPrivate)
-        tab.webView.load(request)
+        guard let sourceWindow = ownerWindow(of: sourceTabID) else { return nil }
+
+        // Keep WebKit's popup in the same browser window and workspace as its
+        // opener, even when another LeafOrLeave window is currently active.
+        let tab = createTab(
+            activate: false,
+            configuration: configuration,
+            in: sourceWindow.id,
+            isPrivate: isPrivate
+        )
+        if let workspaceID = sourceWindow.workspaceID {
+            workspaceManager?.moveTab(tab.id, to: workspaceID)
+        }
+
+        let popupTabID = tab.id
+        let sourceWindowID = sourceWindow.id
+        DispatchQueue.main.async { [weak self] in
+            // Activating synchronously removes the opener WKWebView while
+            // WebKit is still inside createWebViewWith. Waiting one run-loop
+            // turn lets WebKit finish wiring and loading the returned view.
+            self?.selectTab(id: popupTabID, in: sourceWindowID)
+        }
+
+        // Do not call load(_:) here. WebKit owns navigationAction.request and
+        // automatically loads it into the WKWebView returned by this callback.
         return tab.webView
     }
 
@@ -601,7 +674,12 @@ final class TabManager {
     private func updateLifecycleStates() {
         let visible = visibleTabIDs
         for tab in tabs {
-            tab.lifecycleState = visible.contains(tab.id) ? .active : .background
+            if visible.contains(tab.id) {
+                tab.restoreIfNeeded()
+                tab.lifecycleState = .active
+            } else if tab.lifecycleState == .active {
+                tab.lifecycleState = .background
+            }
         }
     }
 }

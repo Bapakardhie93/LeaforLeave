@@ -15,9 +15,10 @@ struct BrowserPageMenu: View {
     let bookmarks: () -> Void
     let history: () -> Void
     let downloads: () -> Void
+    let reviewTabs: () -> Void
+    let archive: () -> Void
     let permissions: () -> Void
     let performance: () -> Void
-    let equalizer: () -> Void
     @State private var isHovered = false
 
     var body: some View {
@@ -39,9 +40,10 @@ struct BrowserPageMenu: View {
             Button(action: bookmarks) { Label("Bookmarks", systemImage: "bookmark") }
             Button(action: history) { Label("History", systemImage: "clock.arrow.circlepath") }
             Button(action: downloads) { Label("Downloads", systemImage: "arrow.down.circle") }
+            Button(action: reviewTabs) { Label("Review Open Tabs…", systemImage: "leaf.arrow.triangle.circlepath") }
+            Button(action: archive) { Label("Archive Current Tab", systemImage: "archivebox") }
             Divider()
             Button(action: performance) { Label("Performance", systemImage: "gauge.with.dots.needle.67percent") }
-            Button(action: equalizer) { Label("Equalizer", systemImage: "slider.vertical.3") }
             Button(action: permissions) { Label("Permissions & Privacy…", systemImage: "hand.raised") }
             Divider()
             SettingsLink { Label("Settings…", systemImage: "gearshape") }

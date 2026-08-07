@@ -43,6 +43,7 @@ struct MiniMediaPanel: View {
 }
 
 private struct MediaControlCard: View {
+    @Environment(\.leafAccentColor) private var accentColor
     let tab: BrowserTab
     let coordinator: MediaCoordinator
     let select: () -> Void
@@ -56,9 +57,9 @@ private struct MediaControlCard: View {
             HStack(spacing: 10) {
                 Image(systemName: tab.hasVideo ? "play.rectangle.fill" : "waveform")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(LeafColors.accent)
+                    .foregroundStyle(accentColor)
                     .frame(width: 34, height: 34)
-                    .background(LeafColors.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: 9))
+                    .background(accentColor.opacity(0.14), in: RoundedRectangle(cornerRadius: 9))
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(tab.title)
@@ -89,7 +90,7 @@ private struct MediaControlCard: View {
                         if !editing { seek(to: currentTime) }
                     }
                 )
-                .tint(LeafColors.accent)
+                .tint(accentColor)
                 .disabled(duration <= 0)
 
                 HStack {
@@ -121,8 +122,8 @@ private struct MediaControlCard: View {
                             .frame(height: 30)
                     }
                     .buttonStyle(.plain)
-                    .background(LeafColors.accent.opacity(0.16), in: RoundedRectangle(cornerRadius: 8))
-                    .foregroundStyle(LeafColors.accent)
+                    .background(accentColor.opacity(0.16), in: RoundedRectangle(cornerRadius: 8))
+                    .foregroundStyle(accentColor)
                     .cursorHelp("Open floating mini-player")
                 }
             }

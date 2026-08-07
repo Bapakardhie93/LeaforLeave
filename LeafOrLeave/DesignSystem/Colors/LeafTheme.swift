@@ -9,6 +9,10 @@ private struct LeafToolbarIconSizeKey: EnvironmentKey {
     static let defaultValue = BrowserChromeMetrics.toolbarIconSize
 }
 
+private struct LeafAppearanceKey: EnvironmentKey {
+    static let defaultValue = LeafAppearance.system
+}
+
 extension EnvironmentValues {
     var leafAccentColor: Color {
         get { self[LeafAccentColorKey.self] }
@@ -19,6 +23,11 @@ extension EnvironmentValues {
     var leafToolbarIconSize: CGFloat {
         get { self[LeafToolbarIconSizeKey.self] }
         set { self[LeafToolbarIconSizeKey.self] = newValue }
+    }
+
+    var leafAppearance: LeafAppearance {
+        get { self[LeafAppearanceKey.self] }
+        set { self[LeafAppearanceKey.self] = newValue }
     }
 }
 
@@ -33,6 +42,38 @@ extension UserAccentColor {
         green = Double(resolved.greenComponent)
         blue = Double(resolved.blueComponent)
         opacity = Double(resolved.alphaComponent)
+    }
+}
+
+extension UIAccent {
+    var color: Color {
+        switch self {
+        case .violet: LeafColors.accent
+        case .blue: .blue
+        case .teal: .teal
+        case .green: .green
+        case .orange: .orange
+        case .pink: .pink
+        }
+    }
+}
+
+extension SettingsData {
+    func resolvedAccentColor(workspaceAccent: String? = nil) -> Color {
+        if useCustomAccent {
+            return customAccent.color
+        }
+        if useWorkspaceAccent, let workspaceAccent {
+            switch workspaceAccent {
+            case "blue": return .blue
+            case "teal": return .teal
+            case "green": return .green
+            case "orange": return .orange
+            case "pink": return .pink
+            default: return LeafColors.accent
+            }
+        }
+        return accent.color
     }
 }
 
@@ -59,9 +100,11 @@ struct LeafTheme {
 }
 
 extension LeafAppearance {
+    var isLiquidGlass: Bool { self == .liquidGlass }
+
     var preferredColorScheme: ColorScheme? {
         switch self {
-        case .system: nil
+        case .system, .liquidGlass: nil
         case .light: .light
         case .dark, .graphiteDark: .dark
         }
@@ -71,7 +114,7 @@ extension LeafAppearance {
     func applyToApplication() {
         let appearance: NSAppearance?
         switch self {
-        case .system:
+        case .system, .liquidGlass:
             appearance = nil
         case .light:
             appearance = NSAppearance(named: .aqua)
@@ -81,6 +124,13 @@ extension LeafAppearance {
         NSApp.appearance = appearance
         for window in NSApp.windows {
             window.appearance = appearance
+            window.isOpaque = !isLiquidGlass
+            window.backgroundColor = isLiquidGlass
+                ? .clear
+                : .windowBackgroundColor
+            window.titlebarAppearsTransparent = isLiquidGlass
+            window.titlebarSeparatorStyle = isLiquidGlass ? .none : .automatic
+            window.invalidateShadow()
             window.contentView?.needsDisplay = true
         }
     }
@@ -92,6 +142,7 @@ private struct LeafAppearanceModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .preferredColorScheme(appearance.preferredColorScheme)
+            .environment(\.leafAppearance, appearance)
             .onAppear { appearance.applyToApplication() }
             .onChange(of: appearance) { _, value in
                 value.applyToApplication()

@@ -11,6 +11,7 @@ struct DeveloperConsoleMessage: Identifiable, Equatable {
 
 struct DeveloperConsoleView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.leafAccentColor) private var accentColor
     let tab: BrowserTab?
     @State private var command = ""
     @State private var result = ""
@@ -18,7 +19,7 @@ struct DeveloperConsoleView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
-                Image(systemName: "ladybug.fill").foregroundStyle(LeafColors.accent)
+                Image(systemName: "ladybug.fill").foregroundStyle(accentColor)
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Developer Console").font(.headline)
                     Text(tab?.title ?? "No active page").font(.caption).foregroundStyle(.secondary)
@@ -58,7 +59,7 @@ struct DeveloperConsoleView: View {
 
             Divider()
             HStack(spacing: 8) {
-                Text("›").font(.system(.body, design: .monospaced)).foregroundStyle(LeafColors.accent)
+                Text("›").font(.system(.body, design: .monospaced)).foregroundStyle(accentColor)
                 TextField("Run JavaScript in the active page", text: $command)
                     .textFieldStyle(.plain).onSubmit(runCommand)
                 Button("Run", action: runCommand).disabled(command.isEmpty || tab == nil)

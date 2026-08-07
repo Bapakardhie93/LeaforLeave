@@ -106,6 +106,11 @@ final class LeafOrLeaveUITests: XCTestCase {
             in: app
         )
         try verifyPanelOpens(
+            sidebarButton: "Archive",
+            closeButton: "Close Archive",
+            in: app
+        )
+        try verifyPanelOpens(
             sidebarButton: "Downloads",
             closeButton: "Close Downloads",
             in: app

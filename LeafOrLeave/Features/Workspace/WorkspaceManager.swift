@@ -90,6 +90,31 @@ final class WorkspaceManager {
         touch(i)
     }
     func reorderWorkspaces(from: IndexSet, to: Int) { workspaces.move(fromOffsets: from, toOffset: to); save() }
+    func restoreTemplates(_ templates: [WorkspaceBackupTemplate]) {
+        for template in templates.prefix(100) {
+            let name = template.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { continue }
+            if let existing = workspaces.firstIndex(where: {
+                $0.name.compare(name, options: .caseInsensitive) == .orderedSame
+            }) {
+                workspaces[existing].symbolName = template.symbolName
+                workspaces[existing].accentToken = template.accentToken
+                workspaces[existing].accentName = template.accentName
+                workspaces[existing].homePage = template.homePage
+                workspaces[existing].updatedAt = .now
+            } else {
+                let now = Date()
+                workspaces.append(BrowserWorkspace(
+                    id: UUID(), name: name, symbolName: template.symbolName,
+                    accentToken: template.accentToken, tabIDs: [], pinnedTabIDs: [],
+                    selectedTabID: nil, createdAt: now, updatedAt: now,
+                    isDefault: false, homePage: template.homePage,
+                    accentName: template.accentName
+                ))
+            }
+        }
+        save()
+    }
     func restoreDefaultWorkspacesIfNeeded() { if workspaces.isEmpty { let now = Date(); workspaces = [("Study","graduationcap.fill","purple"),("Coding","chevron.left.forwardslash.chevron.right","blue"),("Media","play.rectangle.fill","pink")].map { .init(id: UUID(), name: $0.0, symbolName: $0.1, accentToken: $0.2, tabIDs: [], pinnedTabIDs: [], selectedTabID: nil, createdAt: now, updatedAt: now, isDefault: true, homePage: nil, accentName: $0.2) }; save() } }
     private func index(_ id: UUID) -> Int? { workspaces.firstIndex { $0.id == id } }
     private func touch(_ i: Int) { workspaces[i].updatedAt = Date(); save() }

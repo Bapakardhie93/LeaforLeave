@@ -2,6 +2,7 @@ import SwiftUI
 
 enum LeafColors {
     static let background = Color(nsColor: .windowBackgroundColor)
+    static let liquidGlassBackground = Color(nsColor: .windowBackgroundColor).opacity(0.85)
     static let omnibox = Color(nsColor: .controlBackgroundColor).opacity(0.72)
     static let border = Color.primary.opacity(0.11)
     static let chromeSurface = Color.primary.opacity(0.055)
